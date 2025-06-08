@@ -12,15 +12,6 @@ Then lets see if it will make some sense to customize the image... I hope it won
 
 ## Prerequisites
 
-When on Fedora 42:
-
-- Install podman
-- Subscribe system (to easily pass subscription to built containers)
-  - `sudo dnf install subscription-manager && sudo subscription-manager register --username YOUR_REDHAT_USERNAME --password YOUR_REDHAT_PASSWORD --auto-attach`
-  - `podman login registry.redhat.io`
-
-Backup Option:
-
 - RHEL 9 System with
   - registered
   - podman installed
@@ -29,36 +20,47 @@ Backup Option:
     - `podman login registry.redhat.io`
     - `sudo podman login registry.redhat.io`
 
-## Setup image
+## Build bootc image
 
 Build bootc image as a root user:
 
 ```bash
-podman pull registry.redhat.io/rhel10/rhel-bootc:latest
-podman run --rm -it --privileged \
-    -v .:/output \
-    -v /var/lib/containers/storage:/var/lib/containers/storage \
-    -v $(pwd)/config.json:/config.json \
-    --pull newer \
-    registry.redhat.io/rhel10/bootc-image-builder:10.0 \
-    --type qcow2 \
-    --config /config.json \
-    registry.redhat.io/rhel10/rhel-bootc:latest
+podman build -t quay.io/jwerak/rhel-bootc-hass .
 ```
 
-## Deploy VM
+## Deploy instance
+
+### Libvirt deployment
+
+Export qcow2 format:
 
 ```bash
-virt-install \
+podman pull registry.redhat.io/rhel10/rhel-bootc:latest
+podman pull registry.redhat.io/rhel10/bootc-image-builder:latest
+podman run \
+    --rm -it --privileged --pull=newer \
+    --security-opt label=type:unconfined_t \
+    -v /var/lib/containers/storage:/var/lib/containers/storage \
+    -v ./config.toml:/config.toml \
+    -v .:/output \
+    registry.redhat.io/rhel10/bootc-image-builder:latest \
+    --type qcow2 \
+    --config /config.toml \
+  quay.io/jwerak/rhel-bootc-hass
+```
+
+Run VM:
+
+```bash
+sudo mv ./qcow2/disk.qcow2 /var/lib/libvirt/images/rhel-bootc-home-assistant.qcow2
+sudo virt-install \
     --name rhel-bootc-home-assistant \
     --memory 4096 \
     --cpu host-model \
     --vcpus 2 \
-    --import --disk ./qcow2/disk.qcow2,format=qcow2 \
+    --import --disk /var/lib/libvirt/images/rhel-bootc-home-assistant.qcow2 \
     --os-variant rhel10.0
 ```
-
-### Libvirt deployment
 
 ### Deploy to metal
 
@@ -67,3 +69,4 @@ TBD
 ## References
 
 - Nice [Getting Started blog](https://www.redhat.com/en/blog/image-mode-red-hat-enterprise-linux-quick-start-guide)
+- How to [Build and Deploy image mode RHEL](https://developers.redhat.com/articles/2025/03/12/how-build-deploy-and-manage-image-mode-rhel#image_mode_for_rhel)
