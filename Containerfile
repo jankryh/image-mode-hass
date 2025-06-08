@@ -5,3 +5,8 @@ RUN /usr/share/ansible/collections/ansible_collections/redhat/rhel_system_roles/
 
 FROM registry.redhat.io/rhel10/rhel-bootc:latest
 RUN --mount=type=bind,from=ansible-stage,source=/deps/,target=/deps cat /deps/ansible.txt | xargs dnf -y install
+
+COPY ./containers-systemd/* /usr/share/containers/systemd/
+RUN mkdir -p /var/home-assistant/config && \
+    firewall-offline-cmd --add-port=8123/tcp
+

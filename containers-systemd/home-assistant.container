@@ -1,0 +1,20 @@
+[Unit]
+Description=Home Assistant Container
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Restart=on-failure
+
+[Container]
+Image=home-assistant.image
+ContainerName=home-assistant
+PodmanArgs=--privileged
+Network=host
+Environment=TZ=Europe/Prague
+Volume=/var/home-assistant/config:/config:Z
+Volume=/run/dbus:/run/dbus:ro
+Pull=missing
+
+[Install]
+WantedBy=default.target
