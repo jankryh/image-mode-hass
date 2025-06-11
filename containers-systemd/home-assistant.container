@@ -8,6 +8,7 @@ Restart=on-failure
 
 [Container]
 Image=home-assistant.image
+AddDevice=/dev/ttyACM0
 ContainerName=home-assistant
 PodmanArgs=--privileged
 Network=host

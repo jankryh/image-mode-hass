@@ -1,4 +1,5 @@
 config.json
 config.toml
-manifest-qcow2.json
+manifest-*.json
 qcow2/*
+bootiso/*

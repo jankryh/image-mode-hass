@@ -4,12 +4,6 @@ Repo to test how to deploy and manage Home Assistant in Image Mode.
 
 More about [Image Mode here](https://developers.redhat.com/products/rhel-image-mode/overview).
 
-## The plan
-
-First lets try to run from plain RHEL bootc image, no customizations.
-
-Then lets see if it will make some sense to customize the image... I hope it won't.
-
 ## Prerequisites
 
 - RHEL 9 System with
@@ -64,7 +58,38 @@ sudo virt-install \
 
 ### Deploy to metal
 
-TBD
+Build ISO
+
+```bash
+podman pull registry.redhat.io/rhel10/rhel-bootc:latest
+podman pull registry.redhat.io/rhel10/bootc-image-builder:latest
+podman run \
+    --rm -it --privileged --pull=newer \
+    --security-opt label=type:unconfined_t \
+    -v /var/lib/containers/storage:/var/lib/containers/storage \
+    -v ./config.toml:/config.toml \
+    -v .:/output \
+    registry.redhat.io/rhel10/bootc-image-builder:latest \
+    --type iso \
+    --config /config.toml \
+  quay.io/jwerak/rhel-bootc-hass
+```
+
+### Configuring hass
+
+Clone Custom repos:
+
+```bash
+REPO_NAME=volkswagen_we_connect_id
+REPO_URL=https://github.com/mitch-dc/volkswagen_we_connect_id.git
+mkdir -p /var/home-assistant/config/custom_components/${REPO_NAME}
+cd /var/home-assistant/config/custom_components/${REPO_NAME}
+git init
+git remote add -f origin https://github.com/mitch-dc/volkswagen_we_connect_id.git
+git config core.sparseCheckout true
+echo "custom_components/volkswagen_we_connect_id/" > .git/info/sparse-checkout
+
+```
 
 ## References
 
