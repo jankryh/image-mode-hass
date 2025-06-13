@@ -19,7 +19,7 @@ More about [Image Mode here](https://developers.redhat.com/products/rhel-image-m
 Build bootc image as a root user:
 
 ```bash
-podman build -t quay.io/jwerak/rhel-bootc-hass .
+podman build -t quay.io/jwerak/fedora-bootc-hass .
 ```
 
 ## Deploy instance
@@ -29,30 +29,31 @@ podman build -t quay.io/jwerak/rhel-bootc-hass .
 Export qcow2 format:
 
 ```bash
-podman pull registry.redhat.io/rhel10/rhel-bootc:latest
-podman pull registry.redhat.io/rhel10/bootc-image-builder:latest
+podman pull quay.io/fedora/fedora-bootc:latest
+podman pull quay.io/centos-bootc/bootc-image-builder:latest
+
 podman run \
     --rm -it --privileged --pull=newer \
     --security-opt label=type:unconfined_t \
     -v /var/lib/containers/storage:/var/lib/containers/storage \
     -v ./config.toml:/config.toml \
     -v .:/output \
-    registry.redhat.io/rhel10/bootc-image-builder:latest \
+    quay.io/centos-bootc/bootc-image-builder:latest \
     --type qcow2 \
     --config /config.toml \
-  quay.io/jwerak/rhel-bootc-hass
+  quay.io/jwerak/fedora-bootc-hass
 ```
 
 Run VM:
 
 ```bash
-sudo mv ./qcow2/disk.qcow2 /var/lib/libvirt/images/rhel-bootc-home-assistant.qcow2
+sudo mv ./qcow2/disk.qcow2 /var/lib/libvirt/images/fedora-bootc-home-assistant.qcow2
 sudo virt-install \
-    --name rhel-bootc-home-assistant \
+    --name fedora-bootc-home-assistant \
     --memory 4096 \
     --cpu host-model \
     --vcpus 2 \
-    --import --disk /var/lib/libvirt/images/rhel-bootc-home-assistant.qcow2 \
+    --import --disk /var/lib/libvirt/images/fedora-bootc-home-assistant.qcow2 \
     --os-variant rhel10.0
 ```
 
@@ -61,18 +62,31 @@ sudo virt-install \
 Build ISO
 
 ```bash
-podman pull registry.redhat.io/rhel10/rhel-bootc:latest
-podman pull registry.redhat.io/rhel10/bootc-image-builder:latest
+podman pull quay.io/fedora/fedora-bootc:latest
+podman pull quay.io/centos-bootc/bootc-image-builder:latest
 podman run \
     --rm -it --privileged --pull=newer \
     --security-opt label=type:unconfined_t \
     -v /var/lib/containers/storage:/var/lib/containers/storage \
     -v ./config.toml:/config.toml \
     -v .:/output \
-    registry.redhat.io/rhel10/bootc-image-builder:latest \
+    quay.io/centos-bootc/bootc-image-builder:latest \
     --type iso \
     --config /config.toml \
-  quay.io/jwerak/rhel-bootc-hass
+  quay.io/jwerak/fedora-bootc-hass
+```
+
+## Update OS
+
+One option is to build new container locally and update system from it.
+
+Build image and switch to local container storage as source for updates.
+
+```bash
+podman build -t quay.io/jwerak/fedora-bootc-hass .
+bootc switch --transport containers-storage quay.io/jwerak/fedora-bootc-hass
+bootc status
+reboot
 ```
 
 ### Configuring hass
@@ -95,3 +109,4 @@ echo "custom_components/volkswagen_we_connect_id/" > .git/info/sparse-checkout
 
 - Nice [Getting Started blog](https://www.redhat.com/en/blog/image-mode-red-hat-enterprise-linux-quick-start-guide)
 - How to [Build and Deploy image mode RHEL](https://developers.redhat.com/articles/2025/03/12/how-build-deploy-and-manage-image-mode-rhel#image_mode_for_rhel)
+- [Fedora Getting Started with bootc](https://docs.fedoraproject.org/en-US/bootc/getting-started/)
