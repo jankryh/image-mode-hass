@@ -13,13 +13,14 @@ More about [Image Mode here](https://developers.redhat.com/products/rhel-image-m
   - logged into the registry to non-root and root accounts
     - `podman login registry.redhat.io`
     - `sudo podman login registry.redhat.io`
-
+    - `sudo podman login quay.io`
+    - `podman login quay.io`
 ## Build bootc image
 
 Build bootc image as a root user:
 
 ```bash
-podman build -t quay.io/jwerak/fedora-bootc-hass .
+sudo podman build -t quay.io/rh-ee-jkryhut/fedora-bootc-hass .
 ```
 
 ## Deploy instance
@@ -41,7 +42,7 @@ podman run \
     quay.io/centos-bootc/bootc-image-builder:latest \
     --type qcow2 \
     --config /config.toml \
-  quay.io/jwerak/fedora-bootc-hass
+  quay.io/rh-ee-jkryhut/fedora-bootc-hass
 ```
 
 Run VM:
@@ -73,7 +74,7 @@ podman run \
     quay.io/centos-bootc/bootc-image-builder:latest \
     --type iso \
     --config /config.toml \
-  quay.io/jwerak/fedora-bootc-hass
+  quay.io/rh-ee-jkryhut/fedora-bootc-hass
 ```
 
 ## Update OS
