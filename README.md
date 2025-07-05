@@ -21,6 +21,7 @@ Build bootc image as a root user:
 
 ```bash
 sudo podman build -t quay.io/rh-ee-jkryhut/fedora-bootc-hass .
+podman push quay.io/rh-ee-jkryhut/fedora-bootc-hass
 ```
 
 ## Deploy instance
