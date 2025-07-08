@@ -18,4 +18,4 @@ Volume=/run/dbus:/run/dbus:ro
 Pull=missing
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
