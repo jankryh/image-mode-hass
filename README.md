@@ -64,16 +64,16 @@ Build ISO
 ```bash
 podman pull quay.io/fedora/fedora-bootc:latest
 podman pull quay.io/centos-bootc/bootc-image-builder:latest
-podman run \
-    --rm -it --privileged --pull=newer \
-    --security-opt label=type:unconfined_t \
-    -v /var/lib/containers/storage:/var/lib/containers/storage \
-    -v ./config.toml:/config.toml \
-    -v .:/output \
-    quay.io/centos-bootc/bootc-image-builder:latest \
-    --type iso \
-    --config /config.toml \
-  quay.io/jwerak/fedora-bootc-hass
+sudo podman run \
+      --rm -it --privileged --pull=newer \
+      --security-opt label=type:unconfined_t \
+      -v /var/lib/containers/storage:/var/lib/containers/storage \
+      -v ./config.toml:/config.toml \
+      -v .:/output \
+      quay.io/centos-bootc/bootc-image-builder:latest \
+      --type iso \
+      --config /config.toml \
+    quay.io/jwerak/fedora-bootc-hass
 ```
 
 ## Update OS
@@ -83,13 +83,14 @@ One option is to build new container locally and update system from it.
 Build image and switch to local container storage as source for updates.
 
 ```bash
-podman build -t quay.io/jwerak/fedora-bootc-hass .
+podman build --no-cache -t quay.io/jwerak/fedora-bootc-hass .
 bootc switch --transport containers-storage quay.io/jwerak/fedora-bootc-hass
 bootc status
+bootc upgrade
 reboot
 ```
 
-### Configuring hass
+## Configuring hass
 
 Clone Custom repos:
 

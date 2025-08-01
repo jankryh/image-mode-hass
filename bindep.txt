@@ -1,0 +1,6 @@
+vim-enhanced
+iwlwifi-dvm-firmware
+iwlwifi-mvm-firmware
+wpa_supplicant
+zerotier-one
+nut
