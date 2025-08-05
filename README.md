@@ -92,7 +92,7 @@ cp config-example.json config.toml
 ### 3. Build bootc image
 ```bash
 # Build image (run as root)
-sudo podman build -t quay.io/jwerak/fedora-bootc-hass .
+sudo podman build -t quay.io/jkryhut/fedora-bootc-hass .
 
 # Or with your own registry
 sudo podman build -t <your-registry>/fedora-bootc-hass .
