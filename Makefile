@@ -15,7 +15,7 @@ CONTAINER_CMD = $(if $(filter true,$(USE_BUILDAH)),buildah,$(CONTAINER_RUNTIME))
 
 # PERFORMANCE: Advanced build flags with caching and parallelization
 BUILD_FLAGS = \
-	$(if $(filter true,$(USE_CACHE)),--cache-from=$(FULL_IMAGE_NAME)-cache,--no-cache) \
+	$(if $(filter true,$(USE_CACHE)),,--no-cache) \
 	$(if $(filter true,$(VERBOSE)),--progress=plain --log-level=debug,--progress=auto) \
 	$(if $(filter true,$(PARALLEL_BUILD)),--jobs=$(shell nproc),) \
 	--pull=always \
@@ -32,8 +32,6 @@ RUN_FLAGS = \
 # Build optimization variables
 BUILD_MEMORY ?= 4g
 BUILD_CPUS ?= $(shell nproc)
-CACHE_REGISTRY ?= $(REGISTRY)/$(IMAGE_NAME)-cache
-CACHE_TAG ?= latest
 
 # Build targets with performance focus
 .PHONY: help build build-basic build-security build-parallel push clean qcow2 qcow2-basic iso raw deploy-vm deploy-vm-basic status status-detailed
@@ -54,13 +52,12 @@ help: ## Show this help message with performance features
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # High-performance build with advanced caching (now standard)
-build: cache-pull ## High-performance build with caching and optimization
+build: ## High-performance build with caching and optimization
 	@echo "🚀 Building $(FULL_IMAGE_NAME)..."
 	@echo "💡 Using: $(BUILD_CPUS) CPUs, $(BUILD_MEMORY) memory"
 	@echo "📦 Configuration: $(CONFIG_MK)"
 	time sudo $(CONTAINER_CMD) build $(BUILD_FLAGS) \
 		-t $(FULL_IMAGE_NAME) \
-		--cache-to=type=registry,ref=$(CACHE_REGISTRY):$(CACHE_TAG) \
 		.
 	@echo "✅ Build completed: $(FULL_IMAGE_NAME)"
 
@@ -97,20 +94,19 @@ push: build ## Build and push image to registry
 	sudo podman push $(FULL_IMAGE_NAME)
 	@echo "Push completed"
 
-# CACHE MANAGEMENT: Advanced caching strategies
-cache-pull: ## Pull build cache from registry
-	@echo "📥 Pulling build cache..."
-	@sudo $(CONTAINER_CMD) pull $(CACHE_REGISTRY):$(CACHE_TAG) || echo "No cache available"
+# CACHE MANAGEMENT: Local build cache strategies  
+cache-pull: ## Pull latest image for layer caching
+	@echo "📥 Pulling latest image for cache..."
+	@sudo $(CONTAINER_CMD) pull $(FULL_IMAGE_NAME) || echo "No existing image for cache"
 
-cache-push: ## Push build cache to registry  
-	@echo "📤 Pushing build cache..."
-	@sudo $(CONTAINER_CMD) tag $(FULL_IMAGE_NAME) $(CACHE_REGISTRY):$(CACHE_TAG) || true
-	@sudo $(CONTAINER_CMD) push $(CACHE_REGISTRY):$(CACHE_TAG) || echo "Cache push failed"
+cache-push: ## Push built image to registry (creates cache for others)
+	@echo "📤 Pushing image to registry for cache sharing..."
+	@sudo $(CONTAINER_CMD) push $(FULL_IMAGE_NAME) || echo "Push failed - check registry login"
 
 cache-clean: ## Clean local build cache
-	@echo "🧹 Cleaning build cache..."
+	@echo "🧹 Cleaning local build cache..."
 	@sudo $(CONTAINER_CMD) system prune -f --volumes
-	@sudo $(CONTAINER_CMD) rmi $(CACHE_REGISTRY):$(CACHE_TAG) 2>/dev/null || true
+	@echo "✅ Cache cleaned"
 
 pull-deps: ## Pull required base images
 	@echo "Pulling dependencies..."
@@ -261,7 +257,6 @@ status: ## Show build and deployment status
 status-detailed: ## Show detailed build and performance status
 	@echo "=== 📊 Performance Build Status ==="
 	@echo "Image: $(FULL_IMAGE_NAME)"
-	@echo "Cache: $(CACHE_REGISTRY):$(CACHE_TAG)"  
 	@echo "Config: $(CONFIG_FILE)"
 	@echo "Build Resources: $(BUILD_CPUS) CPUs, $(BUILD_MEMORY) memory"
 	@echo ""
@@ -271,7 +266,7 @@ status-detailed: ## Show detailed build and performance status
 	@echo "=== 📈 Image Sizes ==="
 	@sudo $(CONTAINER_CMD) images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | grep $(IMAGE_NAME) || true
 	@echo ""
-	@echo "=== 💾 Cache Status ==="
+	@echo "=== 💾 System Storage ==="
 	@sudo $(CONTAINER_CMD) system df
 	@echo ""
 	@echo "=== 🖥️ VMs ==="
@@ -289,7 +284,6 @@ clean-cache: ## Comprehensive cleanup including cache
 	@echo "🧹 Comprehensive cleanup..."
 	@rm -rf $(OUTPUT_DIR)
 	@sudo $(CONTAINER_CMD) rmi $(FULL_IMAGE_NAME) 2>/dev/null || true
-	@sudo $(CONTAINER_CMD) rmi $(CACHE_REGISTRY):$(CACHE_TAG) 2>/dev/null || true
 	@sudo $(CONTAINER_CMD) system prune -af --volumes
 	@echo "✅ Cleanup completed"
 
