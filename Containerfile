@@ -11,7 +11,7 @@ FROM quay.io/fedora/fedora-bootc:42
 COPY repos/zerotier.repo /etc/yum.repos.d/zerotier.repo
 
 # Install packages from dependency list
-RUN --mount=type=bind,from=ansible-stage,source=/deps/,target=/deps cat /deps/bindep.txt | xargs dnf -y install
+RUN --mount=type=bind,from=ansible-stage,source=/deps/,target=/deps grep -v '^#' /deps/bindep.txt | grep -v '^$' | xargs dnf -y install
 
 # Install additional useful packages for Home Assistant deployment
 RUN dnf -y install \
