@@ -5,7 +5,7 @@
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-supported-green.svg)](https://www.home-assistant.io/)
 [![Fedora](https://img.shields.io/badge/Fedora-42+-blue.svg)](https://fedoraproject.org/)
 
-Complete solution for deploying and managing a Home Assistant server using bootc (Image Mode). This project provides an immutable operating system with a pre-configured Home Assistant container, **integrated management scripts**, automated backups, security hardening, and comprehensive management tools.
+Complete solution for deploying and managing a Home Assistant server using bootc (Image Mode). This project provides an immutable operating system with a pre-configured Home Assistant container, **Ansible-powered dependency management**, **integrated management scripts**, automated backups, security hardening, and comprehensive management tools.
 
 ## 🚀 Quick Start
 
@@ -43,6 +43,7 @@ sudo /opt/hass-scripts/setup-hass.sh
 - [Features](#-features)
 - [Requirements](#-requirements)
 - [Preparation and Build](#-preparation-and-build)
+- [Build Architecture & Dependency Management](#%EF%B8%8F-build-architecture--dependency-management)
 - [Publishing to Registry](#-publishing-to-registry-optional)
 - [Deployment](#-deployment)
 - [System Management and Updates](#-system-management-and-updates)
@@ -55,6 +56,7 @@ sudo /opt/hass-scripts/setup-hass.sh
 ## 🎯 Features
 
 - **Immutable OS**: Uses bootc for secure and consistent updates
+- **Smart Dependency Management**: Ansible-powered automatic package resolution for optimal compatibility
 - **Containerized Home Assistant**: Automatically started via systemd
 - **Integrated Management Scripts**: Pre-installed backup, restore, health-check, and update tools
 - **Automated Maintenance**: Scheduled backups and system updates via systemd timers
@@ -192,6 +194,73 @@ sudo make push
 ```
 
 📖 **For detailed vulnerability management, see [SECURITY_VULNERABILITIES.md](SECURITY_VULNERABILITIES.md)**
+
+## 🏗️ Build Architecture & Dependency Management
+
+### 🎭 Multi-Stage Build with Ansible Integration
+
+This project uses an innovative **multi-stage build approach** with Ansible for automatic dependency resolution:
+
+```dockerfile
+# Stage 1: Dependency Discovery
+FROM quay.io/fedora/fedora-bootc:42 as ansible-stage
+RUN dnf -y install linux-system-roles
+RUN /usr/share/ansible/collections/ansible_collections/fedora/linux_system_roles/roles/podman/.ostree/get_ostree_data.sh packages runtime fedora-42 raw >> /deps/bindep.txt
+
+# Stage 2: Production Image  
+FROM quay.io/fedora/fedora-bootc:42
+RUN --mount=type=bind,from=ansible-stage,source=/deps/,target=/deps \
+    grep -v '^#' /deps/bindep.txt | xargs dnf -y install
+```
+
+### 🤖 How Ansible Dependency Resolution Works
+
+#### **Purpose**: Automatic discovery of optimal package dependencies
+
+| Component | What it does | Why it's smart |
+|-----------|-------------|----------------|
+| **linux-system-roles** | Official Fedora/RHEL Ansible collection | Community-maintained, always current |
+| **get_ostree_data.sh** | Analyzes bootc/ostree environment | Knows exactly what Podman needs in bootc |
+| **Package detection** | Generates runtime dependency list | Optimized for specific Fedora version |
+| **bindep.txt merge** | Combines manual + auto dependencies | Best of both worlds |
+
+#### **Dependencies Sources**:
+
+1. **📝 Manual dependencies** (`bindep.txt`):
+   ```bash
+   # Home Assistant specific packages
+   zerotier-one, openssh-server, nut
+   htop, tree, rsync, tmux, jq
+   fail2ban, chrony, vim-enhanced
+   ```
+
+2. **🤖 Auto-discovered dependencies** (via Ansible):
+   ```bash
+   # Podman runtime requirements for bootc
+   containernetworking-plugins, containers-common
+   container-selinux, fuse-overlayfs, slirp4netns
+   # Plus version-specific optimizations
+   ```
+
+### ✅ Benefits of This Approach
+
+| Traditional Approach | This Ansible Approach |
+|---------------------|----------------------|
+| ❌ Manual dependency tracking | ✅ **Automated dependency resolution** |
+| ❌ Version conflicts possible | ✅ **Community-tested combinations** |
+| ❌ Outdated package lists | ✅ **Always current for Fedora version** |
+| ❌ Bloated with unnecessary packages | ✅ **Minimal, optimized package set** |
+| ❌ Breaks with Fedora updates | ✅ **Adapts to new Fedora releases** |
+
+### 🎯 Result
+
+Your image contains **exactly the packages needed** for:
+- ✅ **Podman containers** in bootc environment
+- ✅ **Home Assistant** functionality  
+- ✅ **System management** tools
+- ✅ **Security and monitoring**
+
+**No bloat, maximum compatibility, automatic updates!** 🚀
 
 ## 📤 Publishing to Registry (Optional)
 
