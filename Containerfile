@@ -74,9 +74,8 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     htop python3-pip logrotate \
     && dnf clean all
 
-# PERFORMANCE: Python packages optimization with caching
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3 install --upgrade --force-reinstall \
+# PERFORMANCE: Python packages optimization 
+RUN pip3 install --upgrade --force-reinstall \
     urllib3==2.5.0 requests cryptography
 
 # PERFORMANCE: Combine system configuration in single layer
