@@ -383,13 +383,13 @@ main() {
     echo "Dependency health check started at $(date)" > "$CHECK_LOG"
     
     # Parse command line arguments
-    local verbose=false
     local security_only=false
     
     while [[ $# -gt 0 ]]; do
         case $1 in
             --verbose|-v)
-                verbose=true
+                # Verbose mode - enable global VERBOSE for debugging
+                export VERBOSE=true
                 shift
                 ;;
             --security-only)

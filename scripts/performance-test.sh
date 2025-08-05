@@ -439,7 +439,6 @@ main() {
     
     # Parse command line arguments
     local test_types=()
-    local verbose=false
     
     while [[ $# -gt 0 ]]; do
         case $1 in

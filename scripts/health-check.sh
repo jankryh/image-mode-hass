@@ -18,7 +18,6 @@ set -- $ARGS
 VERBOSE=false
 if [[ "${1:-}" == "--verbose" ]]; then
     VERBOSE=true
-    LOG_LEVEL=$LOG_LEVEL_DEBUG
 fi
 
 # Redefine log function for backward compatibility
