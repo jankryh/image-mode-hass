@@ -1,0 +1,199 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: quay.io
+  IMAGE_NAME: ${{ github.repository_owner }}/fedora-bootc-hass
+  PODMAN_VERSION: latest
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up test environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y bash shellcheck jq
+
+    - name: Make scripts executable
+      run: chmod +x scripts/*.sh tests/*.sh
+
+    - name: Run shellcheck
+      run: |
+        find scripts -name "*.sh" -type f -print0 | xargs -0 shellcheck -x || true
+
+    - name: Run unit tests
+      run: make test-scripts
+
+    - name: Run integration tests
+      run: make test-integration
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results
+        path: |
+          tests/results/
+          performance_results/
+
+  validate:
+    name: Validate Configuration
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Validate TOML configs
+      run: |
+        # Install toml validation tool
+        pip install toml-cli
+        
+        # Validate all TOML files
+        for file in *.toml; do
+          echo "Validating $file..."
+          python -m toml_cli validate "$file"
+        done
+
+    - name: Check Containerfile syntax
+      run: |
+        # Basic syntax validation
+        grep -E '^FROM|^RUN|^COPY|^LABEL' Containerfile > /dev/null || exit 1
+        echo "Containerfile syntax appears valid"
+
+  build:
+    name: Build Container Image
+    runs-on: ubuntu-latest
+    needs: [test, validate]
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Podman
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install podman
+
+    - name: Log in to Quay.io
+      if: github.event_name != 'pull_request'
+      run: |
+        echo "${{ secrets.QUAY_PASSWORD }}" | podman login quay.io \
+          --username "${{ secrets.QUAY_USERNAME }}" \
+          --password-stdin
+
+    - name: Set up build metadata
+      id: meta
+      run: |
+        # Generate version tag
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          VERSION="latest"
+        elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+          VERSION="develop"
+        else
+          VERSION="pr-${{ github.event.pull_request.number }}"
+        fi
+        
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+        echo "commit_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+    - name: Build container image
+      run: |
+        podman build \
+          --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }} \
+          --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.commit_sha }} \
+          --label "org.opencontainers.image.created=${{ steps.meta.outputs.build_date }}" \
+          --label "org.opencontainers.image.revision=${{ github.sha }}" \
+          --label "org.opencontainers.image.version=${{ steps.meta.outputs.version }}" \
+          .
+
+    - name: Run security scan
+      run: |
+        # Install trivy
+        sudo apt-get install wget apt-transport-https gnupg lsb-release
+        wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+        echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+        sudo apt-get update
+        sudo apt-get install trivy
+        
+        # Scan image
+        trivy image --exit-code 0 --severity HIGH,CRITICAL \
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+
+    - name: Push image
+      if: github.event_name != 'pull_request' && success()
+      run: |
+        podman push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+        podman push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.commit_sha }}
+
+  build-artifacts:
+    name: Build Deployment Artifacts
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+    strategy:
+      matrix:
+        artifact: [qcow2, iso]
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install podman qemu-utils
+
+    - name: Build ${{ matrix.artifact }}
+      run: |
+        # This would require bootc-image-builder
+        echo "Building ${{ matrix.artifact }} artifact..."
+        # make ${{ matrix.artifact }}
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.artifact }}-image
+        path: output/${{ matrix.artifact }}/*
+        retention-days: 7
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build, build-artifacts]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Simple changelog generation
+        echo "## Changes in this release" > CHANGELOG_TEMP.md
+        echo "" >> CHANGELOG_TEMP.md
+        git log --pretty=format:"- %s (%h)" -10 >> CHANGELOG_TEMP.md
+        
+        echo "changelog<<EOF" >> $GITHUB_OUTPUT
+        cat CHANGELOG_TEMP.md >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ github.run_number }}
+        name: Release v${{ github.run_number }}
+        body: ${{ steps.changelog.outputs.changelog }}
+        draft: false
+        prerelease: false
+        files: |
+          output/**/*

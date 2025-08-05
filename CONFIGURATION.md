@@ -58,7 +58,7 @@ IMAGE_TAG = latest                      # Image tag/version
 
 ### Build Settings
 ```makefile
-CONFIG_FILE = config-production.json    # bootc configuration file
+CONFIG_FILE = config-production.toml    # bootc configuration file
 OUTPUT_DIR = ./output                   # Output directory for images
 CONTAINER_RUNTIME = podman              # Container runtime (podman/docker)
 USE_BUILDAH = false                     # Use buildah instead of podman
@@ -80,7 +80,7 @@ VM_OS_VARIANT = rhel9.0                # OS variant for virt-install
 ### Development Settings
 ```makefile
 DEV_TAG = dev                          # Development image tag
-DEV_CONFIG = config-example.json       # Development config file
+DEV_CONFIG = config-example.toml       # Development config file
 DEV_VM_NAME = hass-dev                 # Development VM name
 DEBUG = false                          # Enable debug mode
 ```
@@ -148,7 +148,7 @@ DEBUG = true
 ### Production Environment
 ```makefile
 # config-production.mk
-CONFIG_FILE = config-production.json
+CONFIG_FILE = config-production.toml
 VM_MEMORY = 8192
 VM_VCPUS = 4
 ENABLE_HEALTH_CHECK = true

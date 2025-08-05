@@ -4,6 +4,9 @@
 
 set -euo pipefail
 
+# Source configuration
+source "$(dirname "$0")/config.sh"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -95,13 +98,13 @@ echo ""
 
 # Setup Home Assistant directories
 log "Setting up Home Assistant directories..."
-mkdir -p /var/home-assistant/config
-mkdir -p /var/home-assistant/backups
-mkdir -p /var/log/home-assistant
+mkdir -p "$HASS_CONFIG_DIR"
+mkdir -p "$HASS_BACKUP_DIR"
+mkdir -p "$HASS_LOG_DIR"
 
 # Set proper permissions
-chown -R root:root /var/home-assistant/
-chmod -R 755 /var/home-assistant/
+chown -R root:root "$(dirname "$HASS_CONFIG_DIR")"
+chmod -R 755 "$(dirname "$HASS_CONFIG_DIR")"
 
 log "Home Assistant directories created"
 echo ""
@@ -190,15 +193,15 @@ if ! grep -q "# Home Assistant aliases" /root/.bashrc; then
 alias hass-logs='journalctl -u home-assistant -f'
 alias hass-status='systemctl status home-assistant'
 alias hass-restart='systemctl restart home-assistant'
-alias hass-backup='/opt/hass-scripts/backup-hass.sh'
-alias hass-health='/opt/hass-scripts/health-check.sh'
-alias hass-update='/opt/hass-scripts/update-system.sh'
+alias hass-backup='$HASS_SCRIPTS_DIR/backup-hass.sh'
+alias hass-health='$HASS_SCRIPTS_DIR/health-check.sh'
+alias hass-update='$HASS_SCRIPTS_DIR/update-system.sh'
 EOF
     log "Added useful aliases to /root/.bashrc"
 fi
 
 # Make scripts executable (just in case)
-chmod +x /opt/hass-scripts/*.sh
+chmod +x "$HASS_SCRIPTS_DIR"/*.sh
 
 echo ""
 log "Setup completed successfully!"
@@ -213,9 +216,9 @@ echo "5. Consider setting up SSL/TLS with a reverse proxy"
 echo ""
 
 info "Useful Commands:"
-echo "- Check system health: /opt/hass-scripts/health-check.sh"
-echo "- Create backup: /opt/hass-scripts/backup-hass.sh"
-echo "- Update system: /opt/hass-scripts/update-system.sh"
+echo "- Check system health: $HASS_SCRIPTS_DIR/health-check.sh"
+echo "- Create backup: $HASS_SCRIPTS_DIR/backup-hass.sh"
+echo "- Update system: $HASS_SCRIPTS_DIR/update-system.sh"
 echo "- View Home Assistant logs: journalctl -u home-assistant -f"
 echo ""
 

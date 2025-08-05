@@ -4,9 +4,12 @@
 
 set -euo pipefail
 
-BACKUP_DIR="${1:-/var/home-assistant/backups}"
+# Source configuration
+source "$(dirname "$0")/config.sh"
+
+BACKUP_DIR="${1:-$HASS_BACKUP_DIR}"
 DATE=$(date +%Y%m%d_%H%M%S)
-BACKUP_NAME="hass-backup-${DATE}"
+BACKUP_NAME="${BACKUP_PREFIX}-${DATE}"
 BACKUP_PATH="${BACKUP_DIR}/${BACKUP_NAME}"
 
 # Colors for output
@@ -48,8 +51,8 @@ sleep 5
 
 # Backup Home Assistant configuration
 log "Backing up Home Assistant configuration..."
-if [ -d "/var/home-assistant/config" ]; then
-    tar -czf "${BACKUP_PATH}/hass-config.tar.gz" -C /var/home-assistant/config .
+if [ -d "$HASS_CONFIG_DIR" ]; then
+    tar -czf "${BACKUP_PATH}/hass-config.tar.gz" -C "$HASS_CONFIG_DIR" .
     log "Configuration backup completed"
 else
     warn "Home Assistant config directory not found"
@@ -57,8 +60,8 @@ fi
 
 # Backup database (if exists)
 log "Backing up Home Assistant database..."
-if [ -f "/var/home-assistant/config/home-assistant_v2.db" ]; then
-    cp "/var/home-assistant/config/home-assistant_v2.db" "${BACKUP_PATH}/"
+if [ -f "$HASS_CONFIG_DIR/home-assistant_v2.db" ]; then
+    cp "$HASS_CONFIG_DIR/home-assistant_v2.db" "${BACKUP_PATH}/"
     log "Database backup completed"
 else
     warn "Home Assistant database not found"

@@ -16,7 +16,7 @@ This comprehensive guide covers the advanced optimization features implemented t
 ### Enhanced Build Performance
 
 #### **Optimized Containerfile**
-The new `Containerfile.optimized` includes:
+The main `Containerfile` includes:
 
 - **Multi-stage builds** with aggressive caching
 - **Layer optimization** and proper ordering
@@ -25,8 +25,8 @@ The new `Containerfile.optimized` includes:
 - **Resource optimization**
 
 ```bash
-# Use optimized build process
-make build-optimized
+# Use high-performance build process (now default)
+make build
 
 # Parallel build with maximum performance
 make build-parallel
@@ -39,9 +39,9 @@ make build-security
 
 ```bash
 # Performance-focused targets
-make build-optimized          # High-performance build
-make qcow2-optimized          # Optimized VM images
-make deploy-vm-optimized      # Performance-tuned deployment
+make build                    # High-performance build (with optimizations)
+make qcow2                    # Optimized VM images with compression
+make deploy-vm                # Performance-tuned deployment
 make benchmark                # Performance benchmarking
 make performance-test         # Comprehensive testing
 
@@ -248,7 +248,7 @@ sudo ./scripts/secrets-manager.sh restore /var/home-assistant/backups/secrets_ba
 
 ```bash
 # 1. Performance-optimized build
-make build-optimized
+make build
 
 # 2. Update and check dependencies
 ./scripts/deps-update.sh --verbose
@@ -259,7 +259,7 @@ sudo ./scripts/secrets-manager.sh init
 sudo ./scripts/secrets-manager.sh setup-env production
 
 # 4. Deploy with optimizations
-make deploy-vm-optimized
+make deploy-vm
 
 # 5. Run performance tests
 ./scripts/performance-test.sh --all
@@ -287,7 +287,7 @@ make build-security
 ./scripts/deps-update.sh
 ./scripts/deps-check.sh
 sudo ./scripts/secrets-manager.sh setup-env production
-make deploy-vm-optimized CONFIG_MK=config-production.mk
+make deploy-vm CONFIG_MK=config-production.mk
 ./scripts/performance-test.sh --all
 ```
 
@@ -331,11 +331,11 @@ make cache-pull
 make config-show
 
 # Clean and rebuild
-make clean-optimized
-make build-optimized
+make clean
+make build
 
 # Enable verbose output
-VERBOSE=true make build-optimized
+VERBOSE=true make build
 ```
 
 ### Dependency Problems

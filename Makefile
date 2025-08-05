@@ -37,7 +37,7 @@ BUILD_CPUS ?= $(shell nproc)
 .PHONY: help build build-basic build-security build-parallel push clean qcow2 qcow2-basic iso raw deploy-vm deploy-vm-basic status status-detailed
 .PHONY: dev-build dev-qcow2 dev-deploy all vm clean-vm clean-cache cache-push cache-pull cache-clean pull-deps
 .PHONY: config-create config-show config-template validate-config info benchmark
-.PHONY: deps-update deps-check performance-test
+.PHONY: deps-update deps-check performance-test test test-scripts test-integration version version-bump release
 
 help: ## Show this help message with performance features
 	@echo "Optimized Home Assistant bootc Build System"
@@ -56,7 +56,8 @@ build: ## High-performance build with caching and optimization
 	@echo "🚀 Building $(FULL_IMAGE_NAME)..."
 	@echo "💡 Using: $(BUILD_CPUS) CPUs, $(BUILD_MEMORY) memory"
 	@echo "📦 Configuration: $(CONFIG_MK)"
-	time sudo $(CONTAINER_CMD) build $(BUILD_FLAGS) \
+	@if [ -n "$(USE_ROOTLESS)" ]; then echo "🔓 Rootless mode detected"; fi
+	time $(SUDO_CMD) $(CONTAINER_CMD) build $(BUILD_FLAGS) \
 		-t $(FULL_IMAGE_NAME) \
 		.
 	@echo "✅ Build completed: $(FULL_IMAGE_NAME)"
@@ -91,7 +92,7 @@ build-security: cache-pull ## Security-focused build with performance optimizati
 
 push: build ## Build and push image to registry
 	@echo "Pushing $(FULL_IMAGE_NAME) to registry..."
-	sudo podman push $(FULL_IMAGE_NAME)
+	$(SUDO_CMD) podman push $(FULL_IMAGE_NAME)
 	@echo "Push completed"
 
 # CACHE MANAGEMENT: Local build cache strategies  
@@ -459,6 +460,33 @@ config-show: ## Show current configuration values
 	@echo "DEV_TAG = $(DEV_TAG)"
 	@echo "USE_CACHE = $(USE_CACHE)"
 	@echo "VERBOSE = $(VERBOSE)"
+
+test: ## Run all tests
+	@echo "🧪 Running all tests..."
+	@chmod +x tests/run-all-tests.sh
+	@tests/run-all-tests.sh
+
+test-scripts: ## Run script tests only
+	@echo "🧪 Running script tests..."
+	@chmod +x tests/run-all-tests.sh
+	@tests/run-all-tests.sh --category scripts
+
+test-integration: ## Run integration tests only
+	@echo "🧪 Running integration tests..."
+	@chmod +x tests/run-all-tests.sh
+	@tests/run-all-tests.sh --category integration
+
+version: ## Show current version
+	@chmod +x scripts/version-manager.sh
+	@scripts/version-manager.sh show
+
+version-bump: ## Bump version (use VERSION_BUMP=major|minor|patch)
+	@chmod +x scripts/version-manager.sh
+	@scripts/version-manager.sh bump $(VERSION_BUMP)
+
+release: ## Prepare release
+	@chmod +x scripts/version-manager.sh
+	@scripts/version-manager.sh release
 
 # Default to high-performance build
 .DEFAULT_GOAL := build

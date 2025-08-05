@@ -1,0 +1,29 @@
+# Example custom configuration for Home Assistant bootc scripts
+# Copy this file to /etc/hass-scripts.conf and modify as needed
+
+# Override default paths
+#HASS_CONFIG_DIR="/custom/path/to/config"
+#HASS_BACKUP_DIR="/custom/path/to/backups"
+
+# Custom timezone and locale
+#SYSTEM_TIMEZONE="America/New_York"
+#SYSTEM_LOCALE="en_US.UTF-8"
+
+# Custom container registry
+#CONTAINER_REGISTRY="docker.io/myusername"
+#CONTAINER_IMAGE_NAME="my-hass-image"
+
+# VM configuration
+#VM_MEMORY="8192"
+#VM_VCPUS="4"
+
+# Backup settings
+#BACKUP_RETENTION_DAYS="14"
+
+# Service ports
+#HASS_PORT="8123"
+#SSH_PORT="2222"
+
+# Features
+#ENABLE_AUTO_UPDATE="true"
+#ENABLE_ZEROTIER="false"

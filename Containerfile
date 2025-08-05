@@ -88,28 +88,35 @@ RUN firewall-offline-cmd --add-port=8123/tcp && \
     # Enable services
     systemctl enable sshd chronyd fail2ban && \
     # Set timezone
-    ln -sf /usr/share/zoneinfo/Europe/Prague /etc/localtime
+    ln -sf /usr/share/zoneinfo/${TIMEZONE:-Europe/Prague} /etc/localtime
 
 # PERFORMANCE: Create all directories in single layer
+# Configure paths via build args
+ARG HASS_BASE_DIR=/var/home-assistant
+ARG HASS_SCRIPTS_DIR=/opt/hass-scripts
+ARG HASS_CONFIG_BASE=/opt/hass-config
+
 RUN mkdir -p \
-    /var/home-assistant/config \
-    /var/home-assistant/backups \
-    /var/home-assistant/secrets \
+    ${HASS_BASE_DIR}/config \
+    ${HASS_BASE_DIR}/backups \
+    ${HASS_BASE_DIR}/secrets \
     /var/log/home-assistant \
-    /opt/hass-scripts \
-    /opt/hass-config \
+    ${HASS_SCRIPTS_DIR} \
+    ${HASS_CONFIG_BASE} \
     /etc/hass-secrets && \
-    chmod 755 /var/home-assistant/config /var/home-assistant/backups \
-              /var/log/home-assistant /opt/hass-scripts /opt/hass-config && \
-    chmod 700 /var/home-assistant/secrets /etc/hass-secrets
+    chmod 755 ${HASS_BASE_DIR}/config ${HASS_BASE_DIR}/backups \
+              /var/log/home-assistant ${HASS_SCRIPTS_DIR} ${HASS_CONFIG_BASE} && \
+    chmod 700 ${HASS_BASE_DIR}/secrets /etc/hass-secrets
 
 # PERFORMANCE: Copy all files in optimal order (most stable first)
 COPY containers-systemd/ /usr/share/containers/systemd/
-COPY scripts/ /opt/hass-scripts/
+# Copy scripts with configurable target
+ARG HASS_SCRIPTS_DIR=/opt/hass-scripts
+COPY scripts/ ${HASS_SCRIPTS_DIR}/
 COPY configs/ /opt/hass-config/
 
 # PERFORMANCE: Set permissions and log rotation in single layer
-RUN chmod +x /opt/hass-scripts/*.sh && \
+RUN chmod +x ${HASS_SCRIPTS_DIR}/*.sh && \
     # Configure log rotation
     echo '/var/log/home-assistant/*.log {' > /etc/logrotate.d/home-assistant && \
     echo '    daily' >> /etc/logrotate.d/home-assistant && \

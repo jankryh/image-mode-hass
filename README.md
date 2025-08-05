@@ -1046,7 +1046,7 @@ make deploy-vm-basic                       # Basic VM without performance tuning
 |------|---------|
 | `config.toml` | bootc image builder configuration |
 | `config.mk` | Makefile build configuration |
-| `config-production.json` | Production deployment settings |
+| `config-production.toml` | Production deployment settings |
 | `/var/home-assistant/config/` | Home Assistant configuration |
 
 ### Key Directories

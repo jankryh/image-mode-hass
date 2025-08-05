@@ -1,0 +1,100 @@
+name: Documentation
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '**.md'
+      - 'docs/**'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - '**.md'
+      - 'docs/**'
+
+jobs:
+  lint-markdown:
+    name: Lint Markdown
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Lint Markdown files
+      uses: DavidAnson/markdownlint-cli2-action@v13
+      with:
+        globs: |
+          **/*.md
+          !node_modules/**/*.md
+
+  check-links:
+    name: Check Links
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check links in markdown files
+      uses: lycheeverse/lychee-action@v1
+      with:
+        args: --verbose --no-progress './**/*.md'
+        fail: true
+
+  spell-check:
+    name: Spell Check
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run spell check
+      uses: streetsidesoftware/cspell-action@v5
+      with:
+        files: |
+          **/*.md
+          **/*.sh
+          Containerfile
+
+  generate-docs:
+    name: Generate Documentation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Generate script documentation
+      run: |
+        mkdir -p docs/scripts
+        for script in scripts/*.sh; do
+          if [[ -f "$script" ]]; then
+            script_name=$(basename "$script" .sh)
+            echo "# $script_name" > "docs/scripts/$script_name.md"
+            echo "" >> "docs/scripts/$script_name.md"
+            echo "## Description" >> "docs/scripts/$script_name.md"
+            grep -E "^#\s+[A-Z]" "$script" | head -3 | sed 's/^# //' >> "docs/scripts/$script_name.md"
+            echo "" >> "docs/scripts/$script_name.md"
+            echo "## Usage" >> "docs/scripts/$script_name.md"
+            grep -E "^#\s+Usage:" "$script" | sed 's/^# //' >> "docs/scripts/$script_name.md"
+          fi
+        done
+
+    - name: Generate API documentation
+      run: |
+        echo "# API Documentation" > docs/API.md
+        echo "" >> docs/API.md
+        echo "## Configuration Variables" >> docs/API.md
+        grep -E "^export [A-Z_]+=" scripts/config.sh | sed 's/export /- /' | sed 's/=.*//' >> docs/API.md
+
+    - name: Update Table of Contents
+      run: |
+        # Generate TOC for main README
+        echo "Updating Table of Contents..."
+        # This would use a TOC generator tool
+
+    - name: Commit documentation
+      uses: EndBug/add-and-commit@v9
+      with:
+        add: 'docs/'
+        message: 'docs: auto-generate documentation'
+        default_author: github_actions

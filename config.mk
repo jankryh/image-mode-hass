@@ -36,6 +36,23 @@ CONTAINER_RUNTIME ?= podman
 # Enable buildah for faster builds (if available)
 USE_BUILDAH ?= false
 
+# Rootless mode detection
+ROOTLESS_MODE ?= auto
+
+# Podman socket location
+PODMAN_SOCKET ?= $(XDG_RUNTIME_DIR)/podman/podman.sock
+
+# Sudo command (empty for rootless)
+SUDO_CMD ?= sudo
+
+# Auto-detect rootless mode
+ifeq ($(ROOTLESS_MODE),auto)
+    ifneq ($(wildcard $(PODMAN_SOCKET)),)
+        USE_ROOTLESS = true
+        SUDO_CMD =
+    endif
+endif
+
 # Root filesystem type for disk images
 # Options: ext4 (default, stable), xfs (RHEL/CentOS default), btrfs (modern, snapshots)
 ROOTFS_TYPE ?= ext4
@@ -101,6 +118,9 @@ REMOTE_DIR ?= /tmp/hass-deployment
 # Enable parallel builds
 PARALLEL_BUILD ?= true
 
+# Build arguments for customization
+BUILD_ARGS += --build-arg TIMEZONE=$(TIMEZONE)
+
 # Build cache directory
 BUILD_CACHE ?= ./.buildcache
 
@@ -124,7 +144,7 @@ ENABLE_HEALTH_CHECK ?= true
 HEALTH_CHECK_TIMEOUT ?= 300
 
 # Test configuration file
-TEST_CONFIG ?= config-test.json
+TEST_CONFIG ?= config-test.toml
 
 #==========================================
 # Advanced Options
@@ -161,12 +181,12 @@ LOCALE ?= en_US.UTF-8
 # IMAGE_TAG = test
 
 # For production:
-# CONFIG_FILE = config-production.json
+# CONFIG_FILE = config-production.toml
 # VM_MEMORY = 8192
 # VM_VCPUS = 4
 
 # For development:
-# CONFIG_FILE = config-example.json
+# CONFIG_FILE = config-example.toml
 # IMAGE_TAG = dev
 # DEBUG = true
 # VERBOSE = true
