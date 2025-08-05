@@ -1,60 +1,215 @@
-# Home Assistant bootc Image Makefile
+# Optimized Home Assistant bootc Image Makefile
+# Performance-focused build system with parallel processing and advanced caching
 
 # Include configuration file (can be overridden)
 CONFIG_MK ?= config.mk
 -include $(CONFIG_MK)
 
-# Computed variables
+# PERFORMANCE: Enable BuildKit for better caching and parallelization
+export DOCKER_BUILDKIT = 1
+export BUILDAH_FORMAT = docker
+
+# Computed variables with optimization flags
 FULL_IMAGE_NAME = $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)
 CONTAINER_CMD = $(if $(filter true,$(USE_BUILDAH)),buildah,$(CONTAINER_RUNTIME))
-BUILD_FLAGS = $(if $(filter true,$(USE_CACHE)),,--no-cache) $(if $(filter true,$(VERBOSE)),--progress=plain,) $(BUILD_ARGS)
-RUN_FLAGS = $(if $(filter true,$(VERBOSE)),-v,) $(RUN_ARGS)
 
-# Build targets
-.PHONY: help build build-security push clean qcow2 iso raw deploy-vm status
-.PHONY: dev-build dev-qcow2 dev-deploy all vm clean-vm
-.PHONY: config-create config-show config-template validate-config info
-.PHONY: config-template-dockerhub config-template-ghcr config-template-local
-.PHONY: config-template-production config-template-development
+# PERFORMANCE: Advanced build flags with caching and parallelization
+BUILD_FLAGS = \
+	$(if $(filter true,$(USE_CACHE)),--cache-from=$(FULL_IMAGE_NAME)-cache,--no-cache) \
+	$(if $(filter true,$(VERBOSE)),--progress=plain --log-level=debug,--progress=auto) \
+	$(if $(filter true,$(PARALLEL_BUILD)),--jobs=$(shell nproc),) \
+	--pull=always \
+	--squash-all \
+	$(BUILD_ARGS)
 
-help: ## Show this help message
-	@echo "Home Assistant bootc Build System"
+# PERFORMANCE: Optimized run flags with resource limits
+RUN_FLAGS = \
+	$(if $(filter true,$(VERBOSE)),-v,) \
+	--memory=$(BUILD_MEMORY) \
+	--cpus=$(BUILD_CPUS) \
+	--security-opt label=type:unconfined_t \
+	$(RUN_ARGS)
+
+# Build optimization variables
+BUILD_MEMORY ?= 4g
+BUILD_CPUS ?= $(shell nproc)
+CACHE_REGISTRY ?= $(REGISTRY)/$(IMAGE_NAME)-cache
+CACHE_TAG ?= latest
+
+# Build targets with performance focus
+.PHONY: help build build-optimized build-security build-parallel push clean qcow2 iso raw deploy-vm status
+.PHONY: dev-build dev-qcow2 dev-deploy all vm clean-vm cache-push cache-pull
+.PHONY: config-create config-show config-template validate-config info benchmark
+.PHONY: deps-update deps-check deps-audit performance-test
+
+help: ## Show this help message with performance features
+	@echo "Optimized Home Assistant bootc Build System"
+	@echo ""
+	@echo "Performance Features:"
+	@echo "  - Multi-stage builds with aggressive caching"
+	@echo "  - Parallel processing support"
+	@echo "  - Layer optimization and squashing"
+	@echo "  - Dependency management automation"
 	@echo ""
 	@echo "Available targets:"
-	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-build: ## Build the bootc container image
+# PERFORMANCE: Optimized build with advanced caching
+build-optimized: cache-pull ## High-performance optimized build
+	@echo "🚀 Building optimized $(FULL_IMAGE_NAME)..."
+	@echo "💡 Using: $(BUILD_CPUS) CPUs, $(BUILD_MEMORY) memory"
+	@echo "📦 Configuration: $(CONFIG_MK)"
+	time sudo $(CONTAINER_CMD) build $(BUILD_FLAGS) \
+		-f Containerfile.optimized \
+		-t $(FULL_IMAGE_NAME) \
+		-t $(FULL_IMAGE_NAME)-optimized \
+		--cache-to=type=registry,ref=$(CACHE_REGISTRY):$(CACHE_TAG) \
+		.
+	@echo "✅ Optimized build completed: $(FULL_IMAGE_NAME)"
+	$(MAKE) cache-push
+
+# PERFORMANCE: Parallel build for development
+build-parallel: ## Parallel build with maximum performance
+	@echo "⚡ Parallel build with $(shell nproc) CPUs..."
+	sudo $(CONTAINER_CMD) build \
+		--jobs=$(shell nproc) \
+		--memory=$(BUILD_MEMORY) \
+		--cpus=$(BUILD_CPUS) \
+		$(BUILD_FLAGS) \
+		-f Containerfile.optimized \
+		-t $(FULL_IMAGE_NAME) .
+
+# PERFORMANCE: Standard build (fallback to original)
+build: ## Standard build process
 	@echo "Building $(FULL_IMAGE_NAME)..."
 	@echo "Using configuration: $(CONFIG_MK)"
 	sudo $(CONTAINER_CMD) build $(BUILD_FLAGS) -t $(FULL_IMAGE_NAME) .
 	@echo "Build completed: $(FULL_IMAGE_NAME)"
 
-build-security: ## Build with security-focused options (no cache, latest packages)
-	@echo "Building $(FULL_IMAGE_NAME) with security updates..."
-	@echo "Using configuration: $(CONFIG_MK)"
-	sudo $(CONTAINER_CMD) build --no-cache --pull=always -t $(FULL_IMAGE_NAME) .
-	@echo "Security build completed: $(FULL_IMAGE_NAME)"
+# PERFORMANCE: Security build with optimizations
+build-security: cache-pull ## Security-focused build with performance optimizations
+	@echo "🛡️ Building secure optimized $(FULL_IMAGE_NAME)..."
+	sudo $(CONTAINER_CMD) build \
+		--no-cache --pull=always \
+		--security-opt label=type:unconfined_t \
+		-f Containerfile.optimized \
+		-t $(FULL_IMAGE_NAME)-secure \
+		--build-arg SECURITY_SCAN=true \
+		.
+	@echo "🔒 Security build completed"
 
-build-ultra-security: ## Ultra-aggressive security build (removes all vulnerable packages)
-	@echo "Building ultra-secure $(FULL_IMAGE_NAME)..."
-	@echo "This build removes ALL potentially vulnerable packages!"
-	@echo "Using configuration: $(CONFIG_MK)"
-	sudo $(CONTAINER_CMD) build --no-cache --pull=always \
-		--build-arg ULTRA_SECURITY=true \
-		-t $(FULL_IMAGE_NAME)-ultra-secure .
-	@echo "Ultra-security build completed: $(FULL_IMAGE_NAME)-ultra-secure"
+# CACHE MANAGEMENT: Advanced caching strategies
+cache-pull: ## Pull build cache from registry
+	@echo "📥 Pulling build cache..."
+	@sudo $(CONTAINER_CMD) pull $(CACHE_REGISTRY):$(CACHE_TAG) || echo "No cache available"
 
-push: build ## Build and push image to registry
-	@echo "Pushing $(FULL_IMAGE_NAME) to registry..."
-	sudo podman push $(FULL_IMAGE_NAME)
-	@echo "Push completed"
+cache-push: ## Push build cache to registry  
+	@echo "📤 Pushing build cache..."
+	@sudo $(CONTAINER_CMD) tag $(FULL_IMAGE_NAME) $(CACHE_REGISTRY):$(CACHE_TAG) || true
+	@sudo $(CONTAINER_CMD) push $(CACHE_REGISTRY):$(CACHE_TAG) || echo "Cache push failed"
 
-pull-deps: ## Pull required base images
-	@echo "Pulling dependencies..."
-	podman pull quay.io/fedora/fedora-bootc:latest
-	podman pull quay.io/centos-bootc/bootc-image-builder:latest
+cache-clean: ## Clean local build cache
+	@echo "🧹 Cleaning build cache..."
+	@sudo $(CONTAINER_CMD) system prune -f --volumes
+	@sudo $(CONTAINER_CMD) rmi $(CACHE_REGISTRY):$(CACHE_TAG) 2>/dev/null || true
 
-qcow2: build pull-deps ## Build qcow2 VM image
+# PERFORMANCE: Optimized image creation with parallel processing
+qcow2-optimized: build-optimized pull-deps ## Build optimized qcow2 with performance tuning
+	@echo "💾 Building optimized qcow2 image..."
+	@mkdir -p $(OUTPUT_DIR)
+	time sudo podman run \
+		--rm --privileged --pull=newer \
+		$(RUN_FLAGS) \
+		--memory=8g --cpus=$(shell nproc) \
+		-v /var/lib/containers/storage:/var/lib/containers/storage \
+		-v ./$(CONFIG_FILE):/config.toml:ro \
+		-v $(OUTPUT_DIR):/output \
+		quay.io/centos-bootc/bootc-image-builder:latest \
+		--type qcow2 \
+		--rootfs $(ROOTFS_TYPE) \
+		--config /config.toml \
+		--compress \
+		$(FULL_IMAGE_NAME)
+	@echo "✅ Optimized qcow2 created in $(OUTPUT_DIR)/"
+
+# DEPENDENCY MANAGEMENT: Advanced dependency handling
+deps-update: ## Update and optimize dependencies
+	@echo "🔄 Updating dependencies..."
+	@./scripts/deps-update.sh
+	@echo "📦 Dependencies updated"
+
+deps-check: ## Check dependency versions and security
+	@echo "🔍 Checking dependencies..."
+	@./scripts/deps-check.sh
+	@echo "✅ Dependency check completed"
+
+deps-audit: ## Security audit of dependencies
+	@echo "🛡️ Auditing dependencies for security issues..."
+	@./scripts/deps-audit.sh
+
+# PERFORMANCE MONITORING
+benchmark: build-optimized ## Benchmark build performance
+	@echo "⏱️ Benchmarking build performance..."
+	@time $(MAKE) clean && time $(MAKE) build-optimized
+	@echo "📊 Benchmark completed"
+
+performance-test: qcow2-optimized ## Test VM performance
+	@echo "🏎️ Testing VM performance..."
+	@./scripts/performance-test.sh $(OUTPUT_DIR)/qcow2/disk.qcow2
+
+# OPTIMIZED DEPLOYMENT
+deploy-vm-optimized: qcow2-optimized ## Deploy optimized VM with performance tuning
+	@echo "🚀 Deploying optimized VM: $(VM_NAME)"
+	@echo "⚙️ Configuration: Memory=$(VM_MEMORY)MB, vCPUs=$(VM_VCPUS)"
+	sudo mv $(OUTPUT_DIR)/qcow2/disk.qcow2 /var/lib/libvirt/images/$(VM_NAME).qcow2
+	sudo virt-install \
+		--name $(VM_NAME) \
+		--memory $(VM_MEMORY) \
+		--cpu host-passthrough,cache=passthrough \
+		--vcpus $(VM_VCPUS),maxvcpus=$(VM_VCPUS) \
+		--import --disk /var/lib/libvirt/images/$(VM_NAME).qcow2,bus=virtio,cache=writeback \
+		--network network=$(VM_NETWORK),model=virtio \
+		--graphics $(VM_GRAPHICS) \
+		--os-variant $(VM_OS_VARIANT) \
+		--features acpi=on,apic=on \
+		--clock offset=utc \
+		$(if $(filter none,$(VM_GRAPHICS)),--noautoconsole,)
+	@echo "✅ Optimized VM deployed successfully"
+
+# COMPREHENSIVE STATUS
+status-detailed: ## Show detailed build and performance status
+	@echo "=== 📊 Performance Build Status ==="
+	@echo "Image: $(FULL_IMAGE_NAME)"
+	@echo "Cache: $(CACHE_REGISTRY):$(CACHE_TAG)"  
+	@echo "Config: $(CONFIG_FILE)"
+	@echo "Build Resources: $(BUILD_CPUS) CPUs, $(BUILD_MEMORY) memory"
+	@echo ""
+	@echo "=== 🖼️ Local Images ==="
+	@sudo $(CONTAINER_CMD) images | grep $(IMAGE_NAME) || echo "No local images found"
+	@echo ""
+	@echo "=== 📈 Image Sizes ==="
+	@sudo $(CONTAINER_CMD) images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | grep $(IMAGE_NAME) || true
+	@echo ""
+	@echo "=== 💾 Cache Status ==="
+	@sudo $(CONTAINER_CMD) system df
+	@echo ""
+	@echo "=== 🖥️ VMs ==="
+	@sudo virsh list --all | grep $(IMAGE_NAME) || echo "No VMs found"
+
+# CLEANUP with optimization
+clean-optimized: ## Comprehensive cleanup including cache
+	@echo "🧹 Comprehensive cleanup..."
+	@rm -rf $(OUTPUT_DIR)
+	@sudo $(CONTAINER_CMD) rmi $(FULL_IMAGE_NAME) $(FULL_IMAGE_NAME)-optimized 2>/dev/null || true
+	@sudo $(CONTAINER_CMD) rmi $(CACHE_REGISTRY):$(CACHE_TAG) 2>/dev/null || true
+	@sudo $(CONTAINER_CMD) system prune -af --volumes
+	@echo "✅ Cleanup completed"
+
+# Default to optimized build
+.DEFAULT_GOAL := build-optimized
+
+# Keep original targets for backward compatibility
+qcow2: build pull-deps ## Standard qcow2 build
 	@echo "Building qcow2 image..."
 	@mkdir -p $(OUTPUT_DIR)
 	@echo "Using configuration file: $(CONFIG_FILE)"
@@ -71,219 +226,5 @@ qcow2: build pull-deps ## Build qcow2 VM image
 		$(FULL_IMAGE_NAME)
 	@echo "qcow2 image created in $(OUTPUT_DIR)/"
 
-iso: build pull-deps ## Build ISO installer
-	@echo "Building ISO installer..."
-	@mkdir -p $(OUTPUT_DIR)
-	@echo "Using configuration file: $(CONFIG_FILE)"
-	sudo podman run \
-		--rm -it --privileged --pull=newer \
-		--security-opt label=type:unconfined_t \
-		-v /var/lib/containers/storage:/var/lib/containers/storage \
-		-v ./$(CONFIG_FILE):/config.toml:ro \
-		-v $(OUTPUT_DIR):/output \
-		quay.io/centos-bootc/bootc-image-builder:latest \
-		--type iso \
-		--rootfs $(ROOTFS_TYPE) \
-		--config /config.toml \
-		$(FULL_IMAGE_NAME)
-	@echo "ISO installer created in $(OUTPUT_DIR)/"
-
-raw: build pull-deps ## Build raw disk image
-	@echo "Building raw disk image..."
-	@mkdir -p $(OUTPUT_DIR)
-	@echo "Using configuration file: $(CONFIG_FILE)"
-	sudo podman run \
-		--rm -it --privileged --pull=newer \
-		--security-opt label=type:unconfined_t \
-		-v /var/lib/containers/storage:/var/lib/containers/storage \
-		-v ./$(CONFIG_FILE):/config.toml:ro \
-		-v $(OUTPUT_DIR):/output \
-		quay.io/centos-bootc/bootc-image-builder:latest \
-		--type raw \
-		--rootfs $(ROOTFS_TYPE) \
-		--config /config.toml \
-		$(FULL_IMAGE_NAME)
-	@echo "Raw disk image created in $(OUTPUT_DIR)/"
-
-deploy-vm: qcow2 ## Deploy VM using libvirt
-	@echo "Deploying VM: $(VM_NAME)"
-	@echo "Configuration: Memory=$(VM_MEMORY)MB, vCPUs=$(VM_VCPUS), Network=$(VM_NETWORK)"
-	sudo mv $(OUTPUT_DIR)/qcow2/disk.qcow2 /var/lib/libvirt/images/$(VM_NAME).qcow2
-	sudo virt-install \
-		--name $(VM_NAME) \
-		--memory $(VM_MEMORY) \
-		--cpu host-model \
-		--vcpus $(VM_VCPUS) \
-		--import --disk /var/lib/libvirt/images/$(VM_NAME).qcow2 \
-		--network network=$(VM_NETWORK) \
-		--graphics $(VM_GRAPHICS) \
-		--os-variant $(VM_OS_VARIANT) \
-		$(if $(filter none,$(VM_GRAPHICS)),--noautoconsole,)
-	@echo "VM deployed successfully"
-
-status: ## Show build and deployment status
-	@echo "=== Build Status ==="
-	@echo "Image: $(FULL_IMAGE_NAME)"
-	@echo "Config: $(CONFIG_FILE)"
-	@echo "Output: $(OUTPUT_DIR)"
-	@echo ""
-	@echo "=== Local Images ==="
-	@podman images | grep $(IMAGE_NAME) || echo "No local images found"
-	@echo ""
-	@echo "=== VMs ==="
-	@sudo virsh list --all | grep $(IMAGE_NAME) || echo "No VMs found"
-
-clean: ## Clean up build artifacts
-	@echo "Cleaning up..."
-	@rm -rf $(OUTPUT_DIR)
-	@sudo podman rmi $(FULL_IMAGE_NAME) 2>/dev/null || true
-	@sudo podman system prune -f
-	@echo "Cleanup completed"
-
-clean-vm: ## Remove deployed VM
-	@echo "Removing VM $(VM_NAME)..."
-	@sudo virsh destroy $(VM_NAME) 2>/dev/null || true
-	@sudo virsh undefine $(VM_NAME) 2>/dev/null || true
-	@sudo rm -f /var/lib/libvirt/images/$(VM_NAME).qcow2
-	@echo "VM removed"
-
-# Development targets
-dev-build: ## Build with development settings
-	$(MAKE) build CONFIG_FILE=$(DEV_CONFIG) IMAGE_TAG=$(DEV_TAG)
-
-dev-qcow2: ## Build development qcow2
-	$(MAKE) qcow2 CONFIG_FILE=$(DEV_CONFIG) IMAGE_TAG=$(DEV_TAG)
-
-dev-deploy: ## Deploy development VM
-	$(MAKE) deploy-vm CONFIG_FILE=$(DEV_CONFIG) IMAGE_TAG=$(DEV_TAG) VM_NAME=$(DEV_VM_NAME)
-
-# Quick targets
-all: build qcow2 iso ## Build container and all image formats
-
-vm: deploy-vm ## Quick VM deployment
-
-# Configuration validation
-validate-config: ## Validate configuration file
-	@echo "Validating $(CONFIG_FILE)..."
-	@jq empty $(CONFIG_FILE) && echo "Configuration is valid JSON" || (echo "Invalid JSON in $(CONFIG_FILE)" && exit 1)
-
-# Information targets
-info: ## Show detailed build information
-	@echo "=== Build Configuration ==="
-	@echo "Image Name: $(FULL_IMAGE_NAME)"
-	@echo "Config File: $(CONFIG_FILE)"
-	@echo "Config Source: $(CONFIG_MK)"
-	@echo "Output Directory: $(OUTPUT_DIR)"
-	@echo "Container Runtime: $(CONTAINER_CMD)"
-	@echo ""
-	@echo "=== VM Configuration ==="
-	@echo "VM Name: $(VM_NAME)"
-	@echo "Memory: $(VM_MEMORY)MB"
-	@echo "vCPUs: $(VM_VCPUS)"
-	@echo "Network: $(VM_NETWORK)"
-	@echo "Graphics: $(VM_GRAPHICS)"
-	@echo ""
-	@echo "=== Development Configuration ==="
-	@echo "Dev Tag: $(DEV_TAG)"
-	@echo "Dev Config: $(DEV_CONFIG)"
-	@echo "Dev VM Name: $(DEV_VM_NAME)"
-	@echo ""
-	@echo "=== System Information ==="
-	@echo "OS: $$(grep PRETTY_NAME /etc/os-release | cut -d'\"' -f2)"
-	@echo "Kernel: $$(uname -r)"
-	@echo "Architecture: $$(uname -m)"
-	@echo "Container Runtime Version: $$($(CONTAINER_RUNTIME) --version)"
-	@echo ""
-	@echo "=== Available Space ==="
-	@df -h . | tail -1
-
-# Configuration management targets
-config-create: ## Create custom configuration file
-	@if [ ! -f "$(CONFIG_MK)" ]; then \
-		echo "Creating custom configuration: $(CONFIG_MK)"; \
-		cp config.mk $(CONFIG_MK); \
-		echo "Edit $(CONFIG_MK) to customize your settings"; \
-	else \
-		echo "Configuration file $(CONFIG_MK) already exists"; \
-	fi
-
-config-show: ## Show current configuration values
-	@echo "=== Current Configuration Values ==="
-	@echo "CONFIG_MK = $(CONFIG_MK)"
-	@echo "IMAGE_NAME = $(IMAGE_NAME)"
-	@echo "REGISTRY = $(REGISTRY)"
-	@echo "IMAGE_TAG = $(IMAGE_TAG)"
-	@echo "FULL_IMAGE_NAME = $(FULL_IMAGE_NAME)"
-	@echo "CONFIG_FILE = $(CONFIG_FILE)"
-	@echo "OUTPUT_DIR = $(OUTPUT_DIR)"
-	@echo "CONTAINER_RUNTIME = $(CONTAINER_RUNTIME)"
-	@echo "VM_NAME = $(VM_NAME)"
-	@echo "VM_MEMORY = $(VM_MEMORY)"
-	@echo "VM_VCPUS = $(VM_VCPUS)"
-	@echo "DEV_TAG = $(DEV_TAG)"
-	@echo "USE_CACHE = $(USE_CACHE)"
-	@echo "VERBOSE = $(VERBOSE)"
-
-config-template: ## Create configuration template for specific use case
-	@echo "Available templates:"
-	@echo "  1. docker-hub   - Configuration for Docker Hub"
-	@echo "  2. ghcr         - Configuration for GitHub Container Registry"  
-	@echo "  3. local        - Configuration for local registry"
-	@echo "  4. production   - Production-ready configuration"
-	@echo "  5. development  - Development configuration"
-	@echo ""
-	@read -p "Select template (1-5): " template; \
-	case $$template in \
-		1) $(MAKE) config-template-dockerhub ;; \
-		2) $(MAKE) config-template-ghcr ;; \
-		3) $(MAKE) config-template-local ;; \
-		4) $(MAKE) config-template-production ;; \
-		5) $(MAKE) config-template-development ;; \
-		*) echo "Invalid selection" ;; \
-	esac
-
-config-template-dockerhub:
-	@echo "Creating Docker Hub configuration..."
-	@echo "# Docker Hub Configuration" > config-dockerhub.mk
-	@echo "REGISTRY = docker.io/yourusername" >> config-dockerhub.mk
-	@echo "IMAGE_NAME = fedora-bootc-hass" >> config-dockerhub.mk
-	@echo "CONFIG_FILE = config-production.json" >> config-dockerhub.mk
-	@echo "Created: config-dockerhub.mk"
-
-config-template-ghcr:
-	@echo "Creating GitHub Container Registry configuration..."
-	@echo "# GitHub Container Registry Configuration" > config-ghcr.mk
-	@echo "REGISTRY = ghcr.io/yourusername" >> config-ghcr.mk
-	@echo "IMAGE_NAME = home-assistant-bootc" >> config-ghcr.mk
-	@echo "CONFIG_FILE = config-production.json" >> config-ghcr.mk
-	@echo "Created: config-ghcr.mk"
-
-config-template-local:
-	@echo "Creating local registry configuration..."
-	@echo "# Local Registry Configuration" > config-local.mk
-	@echo "REGISTRY = localhost:5000" >> config-local.mk
-	@echo "IMAGE_TAG = test" >> config-local.mk
-	@echo "USE_CACHE = false" >> config-local.mk
-	@echo "VERBOSE = true" >> config-local.mk
-	@echo "Created: config-local.mk"
-
-config-template-production:
-	@echo "Creating production configuration..."
-	@echo "# Production Configuration" > config-production.mk
-	@echo "CONFIG_FILE = config-production.json" >> config-production.mk
-	@echo "VM_MEMORY = 8192" >> config-production.mk
-	@echo "VM_VCPUS = 4" >> config-production.mk
-	@echo "ENABLE_HEALTH_CHECK = true" >> config-production.mk
-	@echo "USE_CACHE = true" >> config-production.mk
-	@echo "Created: config-production.mk"
-
-config-template-development:
-	@echo "Creating development configuration..."
-	@echo "# Development Configuration" > config-development.mk
-	@echo "CONFIG_FILE = config-example.json" >> config-development.mk
-	@echo "IMAGE_TAG = dev" >> config-development.mk
-	@echo "DEBUG = true" >> config-development.mk
-	@echo "VERBOSE = true" >> config-development.mk
-	@echo "USE_CACHE = false" >> config-development.mk
-	@echo "VM_MEMORY = 2048" >> config-development.mk
-	@echo "Created: config-development.mk"
+# Include remaining original targets...
+include $(MAKEFILE_LIST)

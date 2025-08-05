@@ -1,8 +1,10 @@
 # Home Assistant Management Scripts
 
-This directory contains useful scripts for managing the Home Assistant system on bootc.
+This directory contains useful scripts for managing the Home Assistant system on bootc, including **new advanced optimization and security features**.
 
 ## 📋 Available Scripts
+
+### **Core Management Scripts**
 
 ### 🚀 setup-hass.sh
 **Purpose**: Initial system setup after first boot
@@ -78,6 +80,76 @@ sudo /opt/hass-scripts/update-system.sh [--auto] [--no-reboot]
 2. Create backup
 3. bootc upgrade
 4. Restart (if needed)
+
+### **🆕 Advanced Optimization Scripts**
+
+### 📦 deps-update.sh
+**Purpose**: **NEW!** Advanced dependency management with automated tracking
+```bash
+./scripts/deps-update.sh [--verbose] [--dry-run] [--backup-only] [--report-only]
+```
+
+**Features:**
+- Automated version tracking for all components
+- Security vulnerability monitoring
+- Compatibility matrix checking
+- Automatic backup before updates
+- Detailed HTML reporting
+
+### 🔍 deps-check.sh
+**Purpose**: **NEW!** Dependency health check and security audit
+```bash
+./scripts/deps-check.sh [--verbose] [--security-only]
+```
+
+**What it checks:**
+- Package versions and compliance
+- Security vulnerabilities
+- Python package health
+- Container image status
+- SSH security configuration
+- System services status
+
+### 🔐 secrets-manager.sh
+**Purpose**: **NEW!** Enterprise-grade secrets management with AES-256 encryption
+```bash
+sudo ./scripts/secrets-manager.sh <command> [options]
+```
+
+**Commands:**
+- `init` - Initialize secrets management
+- `store <name> <value> [env]` - Store encrypted secret
+- `get <name> [env]` - Retrieve secret
+- `list [env]` - List all secrets
+- `setup-env <environment>` - Interactive environment setup
+- `backup [dir]` - Backup secrets vault
+- `restore <file>` - Restore from backup
+
+**Security features:**
+- AES-256 encryption
+- Environment isolation (dev/staging/production)
+- Automatic backup capabilities
+- Access control and audit trail
+
+### 🏎️ performance-test.sh
+**Purpose**: **NEW!** Comprehensive performance testing and benchmarking
+```bash
+./scripts/performance-test.sh [--all] [--cpu] [--memory] [--disk] [--network] [--container] [--verbose]
+```
+
+**Test categories:**
+- Boot performance analysis
+- CPU benchmarking
+- Memory performance testing
+- Disk I/O testing
+- Network connectivity testing
+- Container performance testing
+
+**Features:**
+- Automated HTML reporting
+- Performance threshold checking
+- Historical trend analysis
+- Optimization recommendations
 
 ## 🔧 Systemd Services
 

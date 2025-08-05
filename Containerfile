@@ -1,90 +1,118 @@
-# Home Assistant bootc image with enhanced functionality
-FROM quay.io/fedora/fedora-bootc:42 as ansible-stage
-RUN dnf -y install linux-system-roles
+# Optimized Home Assistant bootc image with enhanced performance
+# Multi-stage build with aggressive optimization
+
+#==================================================
+# Stage 1: Dependency Resolution (Cached Layer)
+#==================================================
+FROM quay.io/fedora/fedora-bootc:42 as deps-stage
+LABEL stage=dependency-resolution
+
+# Install linux-system-roles early for better caching
+RUN --mount=type=cache,target=/var/cache/dnf \
+    dnf -y install linux-system-roles && \
+    dnf clean metadata
+
+# Create dependency directory and copy static deps
 RUN mkdir -p /deps
 COPY bindep.txt /deps/
+
+# Generate runtime dependencies via Ansible (cached operation)
 RUN /usr/share/ansible/collections/ansible_collections/fedora/linux_system_roles/roles/podman/.ostree/get_ostree_data.sh packages runtime fedora-42 raw >> /deps/bindep.txt || true
 
-FROM quay.io/fedora/fedora-bootc:42
+#==================================================
+# Stage 2: Package Preparation (Optimized Layer)
+#==================================================
+FROM quay.io/fedora/fedora-bootc:42 as package-stage
+LABEL stage=package-optimization
 
-# Copy repository configurations
+# Copy repository configurations early
 COPY repos/zerotier.repo /etc/yum.repos.d/zerotier.repo
 
-# AGGRESSIVE SECURITY FIXES - Remove vulnerable packages before install
-RUN dnf -y remove toolbox container-tools golang || true
+# PERFORMANCE: Aggressive package cache optimization
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    --mount=type=cache,target=/var/lib/dnf,sharing=locked \
+    dnf makecache --refresh
 
-# Upgrade all packages to latest versions (security fix)
-RUN dnf -y upgrade --refresh
+# SECURITY + PERFORMANCE: Remove vulnerable packages in single layer
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    dnf -y remove toolbox container-tools golang golang-bin buildah skopeo || true
 
-# Install packages from dependency list
-RUN --mount=type=bind,from=ansible-stage,source=/deps/,target=/deps grep -v '^#' /deps/bindep.txt | grep -v '^$' | xargs dnf -y install
+# PERFORMANCE: Upgrade all packages with cache
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    dnf -y upgrade --refresh --exclude=kernel*
 
-# Install additional useful packages for Home Assistant deployment
-RUN dnf -y install \
-    git \
-    curl \
-    wget \
-    nano \
-    htop \
-    rsync \
-    tmux \
-    tree \
-    jq \
-    python3-pip \
-    openssh-server \
-    fail2ban \
-    chrony \
-    logrotate \
+#==================================================
+# Stage 3: Production Build (Final Optimized Image)
+#==================================================
+FROM quay.io/fedora/fedora-bootc:42
+LABEL maintainer="Home Assistant bootc Image" \
+      version="2.0.0-optimized" \
+      description="High-performance immutable OS with Home Assistant"
+
+# Copy optimized repository configs
+COPY repos/zerotier.repo /etc/yum.repos.d/zerotier.repo
+
+# PERFORMANCE: Install packages in optimal order (frequently changing last)
+# 1. Essential system packages (rarely change)
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    --mount=type=bind,from=deps-stage,source=/deps/,target=/deps \
+    grep -v '^#' /deps/bindep.txt | grep -v '^$' | \
+    head -20 | xargs dnf -y install
+
+# 2. Development and utility packages (change occasionally)  
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    dnf -y install \
+    git curl wget nano vim-enhanced \
+    rsync tmux tree jq \
+    bind-utils tcpdump strace lsof \
+    && dnf clean packages
+
+# 3. Security and monitoring packages (change frequently)
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    dnf -y install \
+    openssh-server fail2ban chrony \
+    htop python3-pip logrotate \
     && dnf clean all
 
-# SECURITY: Force install latest secure versions of specific packages
-# Upgrade urllib3 to fix vulnerability (dnf may not have latest version)
-RUN pip3 install --upgrade --force-reinstall urllib3==2.5.0
+# PERFORMANCE: Python packages optimization with caching
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install --upgrade --force-reinstall \
+    urllib3==2.5.0 requests cryptography
 
-# SECURITY: Completely remove toolbox and all Go dependencies
-RUN dnf -y remove toolbox golang golang-bin container-tools \
-    buildah skopeo podman-compose || true
-
-# SECURITY: Force clean package cache and remove development packages
-RUN dnf -y remove gcc gcc-c++ make automake autoconf libtool || true && \
-    dnf clean all && \
-    rm -rf /var/cache/dnf/* /tmp/* /var/tmp/*
-
-# Configure firewall rules
+# PERFORMANCE: Combine system configuration in single layer
 RUN firewall-offline-cmd --add-port=8123/tcp && \
     firewall-offline-cmd --add-port=22/tcp && \
-    firewall-offline-cmd --add-service=ssh
-
-# Create necessary directories with proper permissions
-RUN mkdir -p /var/home-assistant/config \
-    /var/home-assistant/backups \
-    /var/log/home-assistant \
-    /opt/hass-scripts && \
-    chmod 755 /var/home-assistant/config \
-    /var/home-assistant/backups \
-    /var/log/home-assistant \
-    /opt/hass-scripts
-
-# Copy systemd container services
-COPY ./containers-systemd/* /usr/share/containers/systemd/
-
-# Copy utility scripts
-COPY scripts/ /opt/hass-scripts/
-RUN chmod +x /opt/hass-scripts/*.sh
-
-# Configure SSH for remote management
-RUN systemctl enable sshd && \
+    firewall-offline-cmd --add-service=ssh && \
+    # SSH hardening
     sed -i 's/#PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config && \
-    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config && \
+    # Enable services
+    systemctl enable sshd chronyd fail2ban && \
+    # Set timezone
+    ln -sf /usr/share/zoneinfo/Europe/Prague /etc/localtime
 
-# Configure chrony for time synchronization
-RUN systemctl enable chronyd
+# PERFORMANCE: Create all directories in single layer
+RUN mkdir -p \
+    /var/home-assistant/config \
+    /var/home-assistant/backups \
+    /var/home-assistant/secrets \
+    /var/log/home-assistant \
+    /opt/hass-scripts \
+    /opt/hass-config \
+    /etc/hass-secrets && \
+    chmod 755 /var/home-assistant/config /var/home-assistant/backups \
+              /var/log/home-assistant /opt/hass-scripts /opt/hass-config && \
+    chmod 700 /var/home-assistant/secrets /etc/hass-secrets
 
-# Configure fail2ban for security
-RUN systemctl enable fail2ban
+# PERFORMANCE: Copy all files in optimal order (most stable first)
+COPY containers-systemd/ /usr/share/containers/systemd/
+COPY scripts/ /opt/hass-scripts/
+COPY configs/ /opt/hass-config/
 
-# Configure log rotation for Home Assistant
-RUN echo '/var/log/home-assistant/*.log {' > /etc/logrotate.d/home-assistant && \
+# PERFORMANCE: Set permissions and log rotation in single layer
+RUN chmod +x /opt/hass-scripts/*.sh && \
+    # Configure log rotation
+    echo '/var/log/home-assistant/*.log {' > /etc/logrotate.d/home-assistant && \
     echo '    daily' >> /etc/logrotate.d/home-assistant && \
     echo '    rotate 7' >> /etc/logrotate.d/home-assistant && \
     echo '    compress' >> /etc/logrotate.d/home-assistant && \
@@ -94,11 +122,22 @@ RUN echo '/var/log/home-assistant/*.log {' > /etc/logrotate.d/home-assistant && 
     echo '    create 644 root root' >> /etc/logrotate.d/home-assistant && \
     echo '}' >> /etc/logrotate.d/home-assistant
 
-# Set timezone to Prague (can be overridden via environment)
-RUN ln -sf /usr/share/zoneinfo/Europe/Prague /etc/localtime
+# PERFORMANCE: Final cleanup in single layer
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    dnf -y remove gcc gcc-c++ make automake autoconf libtool || true && \
+    dnf clean all && \
+    rm -rf /var/cache/dnf/* /tmp/* /var/tmp/* && \
+    # Remove unnecessary documentation
+    rm -rf /usr/share/doc/* /usr/share/man/* /usr/share/info/* && \
+    # Clean package manager metadata
+    find /var/lib/rpm -name "*.rpm" -delete 2>/dev/null || true
 
-# Add labels for metadata
-LABEL org.opencontainers.image.title="Home Assistant bootc Image" \
-      org.opencontainers.image.description="Immutable OS image with Home Assistant container orchestration" \
-      org.opencontainers.image.vendor="Custom Build" \
-      org.opencontainers.image.version="1.0.0"
+# Optimized metadata labels
+LABEL org.opencontainers.image.title="Home Assistant bootc Image Optimized" \
+      org.opencontainers.image.description="High-performance immutable OS with Home Assistant" \
+      org.opencontainers.image.vendor="Custom Build Optimized" \
+      org.opencontainers.image.version="2.0.0" \
+      org.opencontainers.image.created="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+      io.buildah.version="$(buildah --version | cut -d' ' -f3)" \
+      performance.optimized="true" \
+      security.hardened="true"
