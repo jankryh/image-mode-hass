@@ -51,6 +51,7 @@ qcow2: build pull-deps ## Build qcow2 VM image
 		-v $(OUTPUT_DIR):/output \
 		quay.io/centos-bootc/bootc-image-builder:latest \
 		--type qcow2 \
+		--rootfs $(ROOTFS_TYPE) \
 		--config /config.toml \
 		$(FULL_IMAGE_NAME)
 	@echo "qcow2 image created in $(OUTPUT_DIR)/"
@@ -67,6 +68,7 @@ iso: build pull-deps ## Build ISO installer
 		-v $(OUTPUT_DIR):/output \
 		quay.io/centos-bootc/bootc-image-builder:latest \
 		--type iso \
+		--rootfs $(ROOTFS_TYPE) \
 		--config /config.toml \
 		$(FULL_IMAGE_NAME)
 	@echo "ISO installer created in $(OUTPUT_DIR)/"
@@ -83,6 +85,7 @@ raw: build pull-deps ## Build raw disk image
 		-v $(OUTPUT_DIR):/output \
 		quay.io/centos-bootc/bootc-image-builder:latest \
 		--type raw \
+		--rootfs $(ROOTFS_TYPE) \
 		--config /config.toml \
 		$(FULL_IMAGE_NAME)
 	@echo "Raw disk image created in $(OUTPUT_DIR)/"

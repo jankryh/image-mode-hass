@@ -64,6 +64,7 @@ CONTAINER_RUNTIME = podman              # Container runtime (podman/docker)
 USE_BUILDAH = false                     # Use buildah instead of podman
 USE_CACHE = true                        # Enable build cache
 VERBOSE = false                         # Enable verbose output
+ROOTFS_TYPE = ext4                      # Root filesystem type (ext4/xfs/btrfs)
 ```
 
 ### Virtual Machine Settings
@@ -109,6 +110,29 @@ REGISTRY = quay.io/myorganization
 IMAGE_NAME = home-assistant-bootc
 IMAGE_TAG = v1.0.0
 CONFIG_FILE = config-production.toml
+```
+
+### TOML Configuration Format
+bootc-image-builder expects TOML format with `customizations` top-level structure:
+
+```toml
+# config.toml example
+[[customizations.user]]
+name = "hass-admin"
+password = "your-encrypted-password"
+key = "ssh-rsa AAAAB3Nz... your-public-key"
+groups = ["wheel", "systemd-journal"]
+
+[[customizations.filesystem]]
+mountpoint = "/"
+minsize = "20 GiB"
+
+[[customizations.filesystem]]
+mountpoint = "/var/home-assistant"
+minsize = "50 GiB"
+
+[customizations.kernel]
+append = "quiet splash"
 ```
 
 ### Local Development
@@ -214,6 +238,21 @@ make push CONFIG_MK=config-publish.mk
 
 # Verify in registry web interface
 echo "Check https://quay.io/repository/myorg/fedora-bootc-hass"
+```
+
+### Scenario 5: Different Filesystem Types
+```bash
+# Build with XFS filesystem (RHEL/CentOS style)
+echo "ROOTFS_TYPE = xfs" > config-xfs.mk
+make qcow2 CONFIG_MK=config-xfs.mk
+
+# Build with Btrfs filesystem (modern with snapshots)
+echo "ROOTFS_TYPE = btrfs" > config-btrfs.mk
+make qcow2 CONFIG_MK=config-btrfs.mk
+
+# Build with ext4 filesystem (default, most compatible)
+echo "ROOTFS_TYPE = ext4" > config-ext4.mk
+make qcow2 CONFIG_MK=config-ext4.mk
 ```
 
 ## 🔧 Advanced Configuration

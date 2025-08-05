@@ -1,53 +1,29 @@
 # Home Assistant bootc Production Configuration (TOML format)
 
-[blueprint.customizations]
-hostname = "home-assistant-server"
-timezone = "Europe/Prague" 
-locale = "en_US.UTF-8"
-
 # User configuration
-[[blueprint.customizations.user]]
+[[customizations.user]]
 name = "hass-admin"
 password = "$6$CHANGE_THIS_SALT$CHANGE_THIS_HASH"
 key = "ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAQEAr4q+l5qWZEuPdcPEGKkQzfXBY3xqtU6d3g7mOGluNbtQZCOkyhYpTOuCfkfNZh6ZBLL89QCNFGCaoaqTu6lFSRLj+rdf4k3Fn6iATUMTZBMh3IX+U2uZ8CQmiqmOPQouSYa5F3LUFwj55Kw6kVm30jLI3oNsgnno8+No/0hiC6vTqGPxuUkRPr1YyNIMZZHSs7IsGBF3gxaM3ZdCattoPEuzCO/vk7oCoxmQDM8Fk5tKut5DtRrfKNLhf9rL6t5M3MFApOhy2HRZb7O6Jf/Xjj4XjIP8b/qrUXum8Jnyl2w44QILKoy8I8bNviMD1JJvxiYM+TBRfLykWtrw6pYACQ=="
 groups = ["wheel", "systemd-journal"]
-home = "/home/hass-admin"
 
 # Filesystem configuration
-[[blueprint.customizations.filesystem]]
+[[customizations.filesystem]]
 mountpoint = "/"
 minsize = "20 GiB"
 
-[[blueprint.customizations.filesystem]]
+[[customizations.filesystem]]
 mountpoint = "/var"
 minsize = "30 GiB"
 
-[[blueprint.customizations.filesystem]]
+[[customizations.filesystem]]
 mountpoint = "/var/home-assistant"
 minsize = "50 GiB"
 
-[[blueprint.customizations.filesystem]]
+[[customizations.filesystem]]
 mountpoint = "/var/log"
 minsize = "10 GiB"
 
 # Kernel configuration
-[blueprint.customizations.kernel]
+[customizations.kernel]
 append = "quiet splash"
-
-# Firewall configuration
-[blueprint.customizations.firewall]
-ports = ["22:tcp", "8123:tcp"]
-services = ["ssh"]
-
-# Services configuration
-[blueprint.customizations.services]
-enabled = [
-    "sshd",
-    "chronyd", 
-    "fail2ban",
-    "firewalld",
-    "home-assistant",
-    "zerotier-one",
-    "hass-backup.timer"
-]
-disabled = ["bluetooth", "cups"]

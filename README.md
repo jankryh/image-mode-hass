@@ -96,8 +96,8 @@ Copy and modify the configuration file:
 # Option A: TOML format (recommended)
 cp config-example.toml config.toml
 
-# Option B: JSON format (legacy)
-cp config-example.json config.toml
+# Option B: Convert from JSON format (if needed)
+# bootc-image-builder expects TOML format
 ```
 
 **Important config.toml modifications:**
@@ -125,8 +125,25 @@ make build CONFIG_MK=my-config.mk
 **Available configuration options:**
 - **Container settings**: registry, image name, tag
 - **VM settings**: memory, CPU cores, network
-- **Build options**: cache, verbose mode, runtime
+- **Build options**: cache, verbose mode, runtime, filesystem type
 - **Development**: separate dev configs
+
+**Filesystem types available:**
+- **ext4** (default): Most stable and compatible, recommended for most users
+- **xfs**: RHEL/CentOS default, excellent performance for large files
+- **btrfs**: Modern filesystem with snapshots support, good for advanced users
+
+**Choosing filesystem type:**
+```bash
+# For maximum compatibility (recommended)
+ROOTFS_TYPE=ext4 make qcow2
+
+# For RHEL/CentOS-like systems
+ROOTFS_TYPE=xfs make qcow2
+
+# For advanced features (snapshots, compression)
+ROOTFS_TYPE=btrfs make qcow2
+```
 
 ### 4. Build bootc image
 ```bash
@@ -268,6 +285,7 @@ sudo podman run \
     -v .:/output \
     quay.io/centos-bootc/bootc-image-builder:latest \
     --type qcow2 \
+    --rootfs ext4 \
     --config /config.toml \
     quay.io/rh-ee-jkryhut/fedora-bootc-hass
 ```
@@ -310,6 +328,7 @@ sudo podman run \
     -v .:/output \
     quay.io/centos-bootc/bootc-image-builder:latest \
     --type iso \
+    --rootfs ext4 \
     --config /config.toml \
     quay.io/rh-ee-jkryhut/fedora-bootc-hass
 ```
@@ -339,6 +358,7 @@ sudo podman run \
     -v .:/output \
     quay.io/centos-bootc/bootc-image-builder:latest \
     --type raw \
+    --rootfs ext4 \
     --config /config.toml \
     quay.io/rh-ee-jkryhut/fedora-bootc-hass
 ```

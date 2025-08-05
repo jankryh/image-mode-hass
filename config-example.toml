@@ -2,17 +2,17 @@
 # Copy this file to config.toml and customize for your environment
 
 # User configuration
-[[blueprint.customizations.user]]
+[[customizations.user]]
 name = "ansible"
 password = "changeme"
 key = "ssh-rsa AAAAB3Nz.........."
 groups = ["wheel"]
 
 # Filesystem configuration
-[[blueprint.customizations.filesystem]]
+[[customizations.filesystem]]
 mountpoint = "/"
 minsize = "10 GiB"
 
-[[blueprint.customizations.filesystem]]
+[[customizations.filesystem]]
 mountpoint = "/var/data"
 minsize = "20 GiB"

@@ -36,6 +36,10 @@ CONTAINER_RUNTIME ?= podman
 # Enable buildah for faster builds (if available)
 USE_BUILDAH ?= false
 
+# Root filesystem type for disk images
+# Options: ext4 (default, stable), xfs (RHEL/CentOS default), btrfs (modern, snapshots)
+ROOTFS_TYPE ?= ext4
+
 #==========================================
 # Virtual Machine Configuration
 #==========================================
