@@ -1,0 +1,23 @@
+# Custom Configuration Example
+# Copy this file to config-custom.mk and customize for your environment
+# Usage: make build CONFIG_MK=config-custom.mk
+
+# Basic settings
+REGISTRY = docker.io/myusername
+IMAGE_NAME = home-assistant-bootc
+IMAGE_TAG = v1.0.0
+
+# VM settings
+VM_NAME = my-home-assistant
+VM_MEMORY = 6144
+VM_VCPUS = 3
+VM_NETWORK = bridge0
+
+# Development settings
+DEV_TAG = latest-dev
+DEBUG = true
+VERBOSE = true
+
+# Advanced options
+USE_CACHE = true
+CONTAINER_RUNTIME = podman

@@ -56,7 +56,7 @@ sudo make iso
 ### Hardware
 - **Minimum**: 2 GB RAM, 20 GB storage, 1 CPU core
 - **Recommended**: 4 GB RAM, 50 GB storage, 2 CPU cores
-- **USB/Zigbee devices**: Automatic access support to /dev/ttyACM0
+- **USB/Zigbee devices**: Automatic access support to /dev/ttyACM0, /dev/ttyUSB0
 
 ### Software
 - **RHEL 9/Fedora 42+** or other compatible distribution
@@ -69,6 +69,13 @@ sudo make iso
   podman login registry.redhat.io
   sudo podman login registry.redhat.io
   ```
+
+### 🔍 Distribution Information
+This project uses **Fedora 42** as the base operating system:
+- **Base image**: `quay.io/fedora/fedora-bootc:42`
+- **Build tool**: `quay.io/centos-bootc/bootc-image-builder:latest`
+
+**Note**: The bootc-image-builder tool from CentOS project is distribution-agnostic and can build images for Fedora, CentOS, RHEL, and other distributions. Our system runs entirely on Fedora.
 
 ## 🔨 Preparation and Build
 
@@ -89,26 +96,62 @@ cp config-example.json config.toml
 - Add your SSH public key
 - Adjust filesystem sizes as needed
 
-### 3. Build bootc image
+### 3. Build Configuration (Optional)
+Use the flexible Makefile configuration system:
 ```bash
-# Build image (run as root)
-sudo podman build -t quay.io/rh-ee-jkryhut/fedora-bootc-hass .
+# Option 1: Use defaults
+make build
 
-# Or with your own registry
-sudo podman build -t <your-registry>/fedora-bootc-hass .
+# Option 2: Create custom configuration
+make config-template   # Interactive template creation
+# OR
+cp config.mk my-config.mk
+# Edit my-config.mk with your settings
+
+# Option 3: Use custom configuration
+make build CONFIG_MK=my-config.mk
+```
+
+**Available configuration options:**
+- **Container settings**: registry, image name, tag
+- **VM settings**: memory, CPU cores, network
+- **Build options**: cache, verbose mode, runtime
+- **Development**: separate dev configs
+
+### 4. Build bootc image
+```bash
+# Option A: Using Make (recommended)
+sudo make build
+
+# Option B: Direct podman build
+sudo podman build -t quay.io/rh-ee-jkryhut/fedora-bootc-hass .
 ```
 
 ## 🚀 Deployment
 
 ### Option A: Virtual Machine (Libvirt/KVM)
 
+#### Quick Deployment (Using Make):
+```bash
+# All-in-one deployment
+sudo make all              # Build everything
+sudo make deploy-vm        # Deploy VM with default settings
+
+# Or with custom configuration
+sudo make deploy-vm CONFIG_MK=my-config.mk
+```
+
+#### Manual Deployment Steps:
+
 #### 1. Export qcow2 format:
 ```bash
-# Pull required images
+# Using Make (recommended)
+sudo make qcow2
+
+# Manual approach
 podman pull quay.io/fedora/fedora-bootc:latest
 podman pull quay.io/centos-bootc/bootc-image-builder:latest
 
-# Create qcow2 disk image
 sudo podman run \
     --rm -it --privileged --pull=newer \
     --security-opt label=type:unconfined_t \
@@ -118,24 +161,26 @@ sudo podman run \
     quay.io/centos-bootc/bootc-image-builder:latest \
     --type qcow2 \
     --config /config.toml \
-    quay.io/jwerak/fedora-bootc-hass
+    quay.io/rh-ee-jkryhut/fedora-bootc-hass
 ```
 
 #### 2. Create and start VM:
 ```bash
-# Move disk image
-sudo mv ./qcow2/disk.qcow2 /var/lib/libvirt/images/fedora-bootc-home-assistant.qcow2
+# Using Make
+sudo make vm
 
-# Create VM
+# Manual VM creation
+sudo mv ./output/qcow2/disk.qcow2 /var/lib/libvirt/images/home-assistant-bootc.qcow2
+
 sudo virt-install \
-    --name fedora-bootc-home-assistant \
+    --name home-assistant-bootc \
     --memory 4096 \
     --cpu host-model \
     --vcpus 2 \
-    --import --disk /var/lib/libvirt/images/fedora-bootc-home-assistant.qcow2 \
+    --import --disk /var/lib/libvirt/images/home-assistant-bootc.qcow2 \
     --network network=default \
     --graphics spice \
-    --os-variant rhel10.0
+    --os-variant rhel9.0
 
 # For headless server add:
 # --noautoconsole --console pty,target_type=serial
@@ -145,6 +190,10 @@ sudo virt-install \
 
 #### 1. Create bootable ISO:
 ```bash
+# Using Make (recommended)
+sudo make iso
+
+# Manual approach
 sudo podman run \
     --rm -it --privileged --pull=newer \
     --security-opt label=type:unconfined_t \
@@ -154,16 +203,24 @@ sudo podman run \
     quay.io/centos-bootc/bootc-image-builder:latest \
     --type iso \
     --config /config.toml \
-    quay.io/jwerak/fedora-bootc-hass
+    quay.io/rh-ee-jkryhut/fedora-bootc-hass
 ```
 
 #### 2. Hardware installation:
-1. Burn ISO to USB/DVD
+1. Burn ISO to USB/DVD: `dd if=./output/bootiso/image.iso of=/dev/sdX bs=4M`
 2. Boot from media
 3. Follow installation wizard
 4. System will be automatically configured after installation
 
 ### Option C: Cloud Deployment
+
+#### Quick Cloud Image:
+```bash
+# Create raw disk image for cloud deployment
+sudo make raw
+```
+
+#### Manual Cloud Image Creation:
 For AWS, Azure, GCP you can create a raw disk image:
 ```bash
 sudo podman run \
@@ -175,21 +232,53 @@ sudo podman run \
     quay.io/centos-bootc/bootc-image-builder:latest \
     --type raw \
     --config /config.toml \
-    quay.io/jwerak/fedora-bootc-hass
+    quay.io/rh-ee-jkryhut/fedora-bootc-hass
 ```
 
 ## 🔄 System Management and Updates
 
+### Quick Management Commands
+```bash
+# System health check
+sudo /opt/hass-scripts/health-check.sh
+
+# Manual backup
+sudo /opt/hass-scripts/backup-hass.sh
+
+# System status
+sudo make status
+sudo bootc status
+```
+
 ### OS Updates
 bootc enables atomic updates with rollback capability:
 
-#### Option 1: Local build and update
+#### Option 1: Automated updates (Recommended)
+```bash
+# Enable automatic weekly updates (already configured)
+sudo systemctl enable --now hass-auto-update.timer
+
+# Check update status
+sudo systemctl status hass-auto-update.service
+sudo journalctl -u hass-auto-update.service
+```
+
+#### Option 2: Manual updates
+```bash
+# Using automated script with safety checks
+sudo /opt/hass-scripts/update-system.sh
+
+# Manual bootc update
+sudo bootc upgrade
+```
+
+#### Option 3: Local build and update
 ```bash
 # Build new image locally
-sudo podman build --no-cache -t quay.io/jwerak/fedora-bootc-hass .
+sudo podman build --no-cache -t quay.io/rh-ee-jkryhut/fedora-bootc-hass .
 
 # Switch to local image as update source
-sudo bootc switch --transport containers-storage quay.io/jwerak/fedora-bootc-hass
+sudo bootc switch --transport containers-storage quay.io/rh-ee-jkryhut/fedora-bootc-hass
 
 # Check status
 sudo bootc status
@@ -201,14 +290,52 @@ sudo bootc upgrade
 sudo reboot
 ```
 
-#### Option 2: Update from registry
+### Available Make Targets
 ```bash
-# If you have image in registry
-sudo bootc upgrade
-sudo reboot
+# Build and deployment
+make help                    # Show all available targets
+make build                   # Build container image
+make all                     # Build all formats (container, qcow2, iso)
+make qcow2                   # Create VM disk image
+make iso                     # Create bootable ISO
+make raw                     # Create raw disk image
+make deploy-vm               # Deploy VM using libvirt
+make clean                   # Clean up build artifacts
+
+# Configuration management
+make config-show            # Show current configuration
+make config-create          # Create custom configuration
+make config-template        # Interactive configuration templates
+make info                   # Show detailed system information
+
+# Development
+make dev-build              # Build with development settings
+make dev-deploy             # Deploy development VM
+make validate-config        # Validate JSON configuration
+
+# Examples with custom configuration
+make build CONFIG_MK=my-config.mk
+make deploy-vm CONFIG_MK=production.mk
 ```
 
-#### Rollback when problems occur
+### Management Scripts
+Located in `/opt/hass-scripts/` on deployed systems:
+
+| Script | Purpose |
+|--------|---------|
+| `setup-hass.sh` | Initial system setup after first boot |
+| `backup-hass.sh` | Create complete system backup |
+| `restore-hass.sh` | Restore from backup |
+| `health-check.sh` | Comprehensive system health check |
+| `update-system.sh` | Safe automated system updates |
+
+### Automated Services
+| Service | Schedule | Purpose |
+|---------|----------|---------|
+| `hass-backup.timer` | Daily 2:00 AM | Automatic backups |
+| `hass-auto-update.timer` | Weekly Sunday 3:00 AM | System updates |
+
+### Rollback and Recovery
 ```bash
 # Show available versions
 sudo bootc status
@@ -401,3 +528,45 @@ sudo crontab -e
 - [Fedora bootc Getting Started](https://docs.fedoraproject.org/en-US/bootc/getting-started/)
 - [ZeroTier Documentation](https://docs.zerotier.com/)
 - [Network UPS Tools](https://networkupstools.org/docs/)
+
+### Project Documentation
+- **[CONFIGURATION.md](CONFIGURATION.md)** - Detailed configuration guide
+- **[SECURITY.md](SECURITY.md)** - Security hardening guide
+- **[PROJECT_ANALYSIS.md](PROJECT_ANALYSIS.md)** - Technical project analysis
+- **[scripts/README.md](scripts/README.md)** - Management scripts documentation
+
+## 🎯 Quick Reference
+
+### Daily Usage
+```bash
+# Check system health
+sudo /opt/hass-scripts/health-check.sh
+
+# Access Home Assistant
+http://your-server-ip:8123
+
+# Manual backup
+sudo /opt/hass-scripts/backup-hass.sh
+
+# View logs
+sudo journalctl -u home-assistant
+sudo podman logs home-assistant
+```
+
+### Configuration Files
+| File | Purpose |
+|------|---------|
+| `config.toml` | bootc image builder configuration |
+| `config.mk` | Makefile build configuration |
+| `config-production.json` | Production deployment settings |
+| `/var/home-assistant/config/` | Home Assistant configuration |
+
+### Key Directories
+| Directory | Purpose |
+|-----------|---------|
+| `/var/home-assistant/config/` | Home Assistant configuration |
+| `/var/home-assistant/backups/` | System backups |
+| `/opt/hass-scripts/` | Management utilities |
+| `/var/log/home-assistant/` | Application logs |
+
+This project provides a complete, production-ready Home Assistant deployment using modern container technologies with automated management, security hardening, and comprehensive backup solutions.

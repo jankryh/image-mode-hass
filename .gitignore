@@ -18,6 +18,12 @@ config.json
 !config-example.json
 !config-production.json
 
+# Custom Makefile configurations
+config-*.mk
+!config-custom.mk.example
+my-config.mk
+local-config.mk
+
 # Logs
 *.log
 logs/
