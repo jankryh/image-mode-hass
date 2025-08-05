@@ -26,7 +26,9 @@ jobs:
         sudo apt-get install -y bash shellcheck jq
 
     - name: Make scripts executable
-      run: chmod +x scripts/*.sh tests/*.sh
+      run: |
+        find scripts -name "*.sh" -type f -exec chmod +x {} \;
+        find tests -name "*.sh" -type f -exec chmod +x {} \;
 
     - name: Run shellcheck
       run: |
@@ -40,7 +42,7 @@ jobs:
 
     - name: Upload test results
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-results
         path: |
@@ -56,13 +58,15 @@ jobs:
 
     - name: Validate TOML configs
       run: |
-        # Install toml validation tool
-        pip install toml-cli
+        # Install toml library for validation
+        pip install toml
         
         # Validate all TOML files
         for file in *.toml; do
-          echo "Validating $file..."
-          python -m toml_cli validate "$file"
+          if [[ -f "$file" ]]; then
+            echo "Validating $file..."
+            python -c "import toml; import sys; toml.load(open('$file')); print('✓ $file is valid TOML')" || exit 1
+          fi
         done
 
     - name: Check Containerfile syntax
@@ -176,7 +180,7 @@ jobs:
         # make ${{ matrix.artifact }}
 
     - name: Upload artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.artifact }}-image
         path: output/${{ matrix.artifact }}/*
