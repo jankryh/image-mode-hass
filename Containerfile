@@ -33,18 +33,25 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     --mount=type=cache,target=/var/lib/dnf,sharing=locked \
     dnf makecache --refresh
 
-# SECURITY + PERFORMANCE: Remove vulnerable packages in single layer
+# SECURITY: Aggressively remove vulnerable packages and force updates
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
-    dnf -y remove toolbox container-tools golang golang-bin buildah skopeo || true
+    --mount=type=cache,target=/var/lib/dnf,sharing=locked \
+    dnf -y remove toolbox* container-tools* golang* buildah* skopeo* podman-compose* \
+        go-toolset* golang-*mapstructure* golang-github* || true && \
+    dnf -y autoremove
 
-# PERFORMANCE: Upgrade all packages with cache
+# SECURITY: Force security updates and latest patches
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
-    dnf -y upgrade --refresh --exclude=kernel*
+    --mount=type=cache,target=/var/lib/dnf,sharing=locked \
+    dnf makecache --refresh && \
+    dnf -y upgrade --refresh --security --exclude=kernel* && \
+    dnf -y install-updates --security && \
+    dnf clean all
 
 #==================================================
 # Stage 3: Production Build (Final Optimized Image)
 #==================================================
-FROM quay.io/fedora/fedora-bootc:42
+FROM quay.io/fedora/fedora-bootc:42 as production
 LABEL maintainer="Home Assistant bootc Image" \
       version="2.0.0-optimized" \
       description="High-performance immutable OS with Home Assistant"
@@ -146,4 +153,90 @@ LABEL org.opencontainers.image.title="Home Assistant bootc Image Optimized" \
       org.opencontainers.image.created="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
       io.buildah.version="$(buildah --version | cut -d' ' -f3)" \
       performance.optimized="true" \
-      security.hardened="true"
+      security.hardened="standard"
+
+#==================================================
+# Stage 4: Security Hardened Build (Enhanced Security)
+#==================================================
+FROM production as security-hardened
+
+# SECURITY: Enhanced vulnerability mitigation
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    --mount=type=cache,target=/var/lib/dnf,sharing=locked \
+    # Remove ALL potentially vulnerable packages aggressively
+    dnf -y remove \
+        toolbox* container-tools* golang* buildah* skopeo* \
+        podman-compose* go-toolset* golang-*mapstructure* \
+        golang-github* runc* conmon* crun* \
+        *-devel *-debuginfo *-debugsource \
+        gcc* make* automake* autoconf* libtool* \
+        cmake* kernel-devel* kernel-headers* || true && \
+    # Force remove vulnerable libs
+    dnf -y remove \
+        *viper* *mapstructure* *golang* || true && \
+    # Aggressive cleanup
+    dnf -y autoremove && \
+    dnf clean all
+
+# SECURITY: Force latest security updates (second pass)
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    dnf makecache --refresh && \
+    dnf -y check-update --security || true && \
+    dnf -y upgrade --refresh --security --nobest && \
+    dnf -y distro-sync --security && \
+    dnf clean all
+
+# SECURITY: Remove unnecessary files and reduce attack surface
+RUN rm -rf \
+    /usr/share/doc/* \
+    /usr/share/man/* \
+    /usr/share/info/* \
+    /usr/share/locale/* \
+    /usr/include/* \
+    /usr/lib*/gconv \
+    /usr/lib*/gcc \
+    /usr/lib*/cmake \
+    /usr/lib*/pkgconfig \
+    /var/cache/* \
+    /var/log/* \
+    /tmp/* \
+    /var/tmp/* \
+    && mkdir -p /var/log/home-assistant
+
+# SECURITY: Enhanced SSH hardening
+RUN sed -i 's/#Protocol 2/Protocol 2/' /etc/ssh/sshd_config && \
+    sed -i 's/#LogLevel INFO/LogLevel VERBOSE/' /etc/ssh/sshd_config && \
+    sed -i 's/#MaxAuthTries 6/MaxAuthTries 3/' /etc/ssh/sshd_config && \
+    sed -i 's/#ClientAliveInterval 0/ClientAliveInterval 300/' /etc/ssh/sshd_config && \
+    sed -i 's/#ClientAliveCountMax 3/ClientAliveCountMax 2/' /etc/ssh/sshd_config && \
+    sed -i 's/#AllowTcpForwarding yes/AllowTcpForwarding no/' /etc/ssh/sshd_config && \
+    sed -i 's/#X11Forwarding yes/X11Forwarding no/' /etc/ssh/sshd_config && \
+    sed -i 's/#PermitEmptyPasswords no/PermitEmptyPasswords no/' /etc/ssh/sshd_config
+
+# SECURITY: Enhanced fail2ban configuration
+RUN mkdir -p /etc/fail2ban/jail.d && \
+    echo '[sshd]' > /etc/fail2ban/jail.d/custom.conf && \
+    echo 'enabled = true' >> /etc/fail2ban/jail.d/custom.conf && \
+    echo 'maxretry = 3' >> /etc/fail2ban/jail.d/custom.conf && \
+    echo 'bantime = 3600' >> /etc/fail2ban/jail.d/custom.conf && \
+    echo 'findtime = 600' >> /etc/fail2ban/jail.d/custom.conf
+
+# SECURITY: Enhanced firewall rules
+RUN firewall-offline-cmd --set-default-zone=public && \
+    firewall-offline-cmd --remove-service=dhcpv6-client || true && \
+    firewall-offline-cmd --remove-service=mdns || true && \
+    firewall-offline-cmd --remove-service=samba-client || true
+
+# SECURITY: File system permissions hardening
+RUN chmod 700 /root && \
+    chmod 755 /etc /usr /var && \
+    find /etc -type f -name "*.conf" -exec chmod 644 {} \; && \
+    find /etc -type f -name "*passwd*" -exec chmod 640 {} \; && \
+    find /etc -type f -name "*shadow*" -exec chmod 600 {} \;
+
+# SECURITY: Update labels with enhanced security info  
+LABEL security.hardened="enhanced" \
+      security.scan.date="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+      security.vulnerabilities.removed="toolbox,golang,mapstructure" \
+      security.level="high" \
+      security.compliance="cis-basic"

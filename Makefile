@@ -38,6 +38,7 @@ BUILD_CPUS ?= $(shell nproc)
 .PHONY: dev-build dev-qcow2 dev-deploy all vm clean-vm clean-cache cache-push cache-pull cache-clean pull-deps
 .PHONY: config-create config-show config-template validate-config info benchmark
 .PHONY: deps-update deps-check performance-test test test-scripts test-integration version version-bump release
+.PHONY: security-scan security-quick security-report security-monitor security-install
 
 help: ## Show this help message with performance features
 	@echo "Optimized Home Assistant bootc Build System"
@@ -487,6 +488,50 @@ version-bump: ## Bump version (use VERSION_BUMP=major|minor|patch)
 release: ## Prepare release
 	@chmod +x scripts/version-manager.sh
 	@scripts/version-manager.sh release
+
+#==================================================
+# Security Targets
+#==================================================
+
+security-install: ## Install security scanning tools
+	@echo "🔧 Installing security scanning tools..."
+	@chmod +x scripts/security-check.sh
+	@scripts/security-check.sh install-trivy
+
+security-quick: ## Quick security vulnerability check
+	@echo "🔍 Running quick security scan..."
+	@chmod +x scripts/security-check.sh
+	@scripts/security-check.sh quick --image $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)
+
+security-scan: ## Comprehensive security vulnerability scan
+	@echo "🛡️  Running comprehensive security scan..."
+	@chmod +x scripts/security-check.sh
+	@scripts/security-check.sh scan --image $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG) --fix-suggestions
+
+security-report: ## Generate detailed security report
+	@echo "📊 Generating security report..."
+	@chmod +x scripts/security-check.sh
+	@scripts/security-check.sh report --image $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)
+
+security-monitor: ## Set up continuous security monitoring
+	@echo "🔔 Setting up security monitoring..."
+	@chmod +x scripts/security-check.sh
+	@scripts/security-check.sh monitor
+
+# Enhanced security build with vulnerability fixes
+build-secure: ## Build with enhanced security (removes vulnerable packages)
+	@echo "🔒 Building secure image with vulnerability fixes..."
+	@$(SUDO_CMD) $(CONTAINER_CMD) build \
+		$(BUILD_ARGS) \
+		--target security-hardened \
+		--tag $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)-secure \
+		--tag $(REGISTRY)/$(IMAGE_NAME):latest-secure \
+		--label "org.opencontainers.image.created=$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+		--label "org.opencontainers.image.revision=$(shell git rev-parse HEAD)" \
+		--label "org.opencontainers.image.version=$(IMAGE_TAG)-secure" \
+		--label "bootc.security.hardened=true" \
+		.
+	@echo "✅ Secure image built: $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)-secure"
 
 # Default to high-performance build
 .DEFAULT_GOAL := build

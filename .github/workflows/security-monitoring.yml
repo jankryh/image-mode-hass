@@ -1,0 +1,191 @@
+name: Security Monitoring
+
+on:
+  schedule:
+    # Run security scan daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      scan_type:
+        description: 'Type of security scan'
+        required: false
+        default: 'full'
+        type: choice
+        options:
+          - 'full'
+          - 'critical-only'
+          - 'quick'
+
+env:
+  REGISTRY: quay.io
+  IMAGE_NAME: ${{ github.repository_owner }}/fedora-bootc-hass
+  SCAN_RESULTS_DIR: security-results
+
+jobs:
+  security-scan:
+    name: Security Vulnerability Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install container security tools
+      run: |
+        # Install Trivy
+        sudo apt-get update
+        sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+        wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+        echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+        sudo apt-get update
+        sudo apt-get install -y trivy
+
+        # Install Grype
+        curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
+
+        # Install Podman
+        sudo apt-get install -y podman
+
+    - name: Pull latest image for scanning
+      run: |
+        # Try to pull the latest image, fallback to building if not available
+        if ! podman pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest; then
+          echo "Image not found in registry, building locally for security scan"
+          podman build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest .
+        fi
+
+    - name: Create results directory
+      run: mkdir -p ${{ env.SCAN_RESULTS_DIR }}
+
+    - name: Run Trivy vulnerability scan
+      run: |
+        # Comprehensive Trivy scan
+        trivy image \
+          --format sarif \
+          --output ${{ env.SCAN_RESULTS_DIR }}/trivy-results.sarif \
+          --severity HIGH,CRITICAL \
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+        # Human-readable report
+        trivy image \
+          --format table \
+          --output ${{ env.SCAN_RESULTS_DIR }}/trivy-table.txt \
+          --severity HIGH,CRITICAL \
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+        # JSON report for automation
+        trivy image \
+          --format json \
+          --output ${{ env.SCAN_RESULTS_DIR }}/trivy-results.json \
+          --severity HIGH,CRITICAL \
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+    - name: Run Grype vulnerability scan
+      run: |
+        grype ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+          -o sarif \
+          --file ${{ env.SCAN_RESULTS_DIR }}/grype-results.sarif
+
+        grype ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+          -o table \
+          --file ${{ env.SCAN_RESULTS_DIR }}/grype-table.txt
+
+    - name: Run container configuration scan
+      run: |
+        # Scan for container misconfigurations
+        trivy config \
+          --format sarif \
+          --output ${{ env.SCAN_RESULTS_DIR }}/config-scan.sarif \
+          .
+
+    - name: Upload Trivy results to GitHub Security tab
+      if: always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ env.SCAN_RESULTS_DIR }}/trivy-results.sarif
+        category: 'trivy-container'
+
+    - name: Upload Grype results to GitHub Security tab
+      if: always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ env.SCAN_RESULTS_DIR }}/grype-results.sarif
+        category: 'grype-container'
+
+    - name: Upload config scan results
+      if: always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ env.SCAN_RESULTS_DIR }}/config-scan.sarif
+        category: 'trivy-config'
+
+    - name: Generate security summary
+      if: always()
+      run: |
+        echo "# Security Scan Summary" > ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+        echo "Scan Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+        echo "" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+        
+        # Count vulnerabilities from Trivy JSON
+        if [[ -f "${{ env.SCAN_RESULTS_DIR }}/trivy-results.json" ]]; then
+          CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' ${{ env.SCAN_RESULTS_DIR }}/trivy-results.json)
+          HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' ${{ env.SCAN_RESULTS_DIR }}/trivy-results.json)
+          
+          echo "## Trivy Scan Results" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+          echo "- Critical vulnerabilities: $CRITICAL" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+          echo "- High vulnerabilities: $HIGH" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+          echo "" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+        fi
+
+        # Add recommendations
+        echo "## Recommended Actions" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+        echo "1. Review detailed scan results in the Security tab" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+        echo "2. Update base images to latest versions" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+        echo "3. Remove unnecessary packages and dependencies" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+        echo "4. Apply security patches promptly" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+
+    - name: Upload security scan artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-scan-results-${{ github.run_number }}
+        path: ${{ env.SCAN_RESULTS_DIR }}/
+        retention-days: 30
+
+    - name: Check for critical vulnerabilities
+      run: |
+        if [[ -f "${{ env.SCAN_RESULTS_DIR }}/trivy-results.json" ]]; then
+          CRITICAL_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' ${{ env.SCAN_RESULTS_DIR }}/trivy-results.json)
+          
+          if [[ $CRITICAL_COUNT -gt 0 ]]; then
+            echo "⚠️ Found $CRITICAL_COUNT critical vulnerabilities!"
+            echo "Please review the security scan results and apply fixes."
+            exit 1
+          else
+            echo "✅ No critical vulnerabilities found"
+          fi
+        fi
+
+    - name: Create security issue on critical findings
+      if: failure() && github.event_name == 'schedule'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const path = '${{ env.SCAN_RESULTS_DIR }}/security-summary.md';
+          
+          if (fs.existsSync(path)) {
+            const summary = fs.readFileSync(path, 'utf8');
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Security Alert: Critical vulnerabilities detected - ${new Date().toISOString().split('T')[0]}`,
+              body: `${summary}\n\n## Automated Security Scan Results\n\nThis issue was automatically created because critical vulnerabilities were detected in the container image.\n\n**Next Steps:**\n1. Review the detailed scan results in the [Security tab](https://github.com/${context.repo.owner}/${context.repo.repo}/security)\n2. Update dependencies and base images\n3. Rebuild and redeploy the image\n4. Close this issue once vulnerabilities are resolved\n\n**Scan Run:** [${context.runId}](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
+              labels: ['security', 'vulnerability', 'critical', 'automated']
+            });
+          }
