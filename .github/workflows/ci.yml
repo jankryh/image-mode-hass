@@ -293,12 +293,10 @@ jobs:
         # Get recent commits with proper escaping
         git log --pretty=format:"- %s (%h)" --no-merges -10 >> CHANGELOG_TEMP.md || true
         
-        # Use proper heredoc syntax for multiline output
-        {
-          echo 'changelog<<CHANGELOG_EOF'
-          cat CHANGELOG_TEMP.md
-          echo 'CHANGELOG_EOF'
-        } >> "$GITHUB_OUTPUT"
+        # Use GitHub Actions multiline output format
+        echo "changelog<<EOF" >> "$GITHUB_OUTPUT"
+        cat CHANGELOG_TEMP.md >> "$GITHUB_OUTPUT"
+        echo "EOF" >> "$GITHUB_OUTPUT"
         
         # Cleanup temp file
         rm -f CHANGELOG_TEMP.md

@@ -72,11 +72,17 @@ check_dependencies() {
 install_trivy() {
     info "Installing Trivy..."
     
-    if command -v dnf &> /dev/null; then
+    if command -v brew &> /dev/null; then
+        # macOS with Homebrew (preferred)
+        info "Installing Trivy via Homebrew..."
+        brew install trivy
+    elif command -v dnf &> /dev/null; then
         # Fedora/RHEL
+        info "Installing Trivy via DNF..."
         sudo dnf install -y trivy
     elif command -v apt &> /dev/null; then
         # Ubuntu/Debian
+        info "Installing Trivy via APT..."
         sudo apt-get update
         sudo apt-get install -y wget apt-transport-https gnupg lsb-release
         wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
@@ -84,8 +90,9 @@ install_trivy() {
         sudo apt-get update
         sudo apt-get install -y trivy
     else
-        # Generic installation
-        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+        # Generic installation with sudo
+        info "Installing Trivy via generic installer..."
+        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
     fi
     
     success "Trivy installed successfully"
