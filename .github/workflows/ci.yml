@@ -293,10 +293,9 @@ jobs:
         # Get recent commits with proper escaping
         git log --pretty=format:"- %s (%h)" --no-merges -10 >> CHANGELOG_TEMP.md || true
         
-        # Use GitHub Actions multiline output format
-        echo "changelog<<EOF" >> "$GITHUB_OUTPUT"
-        cat CHANGELOG_TEMP.md >> "$GITHUB_OUTPUT"
-        echo "EOF" >> "$GITHUB_OUTPUT"
+        # Convert to single line with JSON-style escaping
+        changelog_content=$(cat CHANGELOG_TEMP.md | sed 's/"/\\"/g' | tr '\n' ' ' | sed 's/  */ /g')
+        echo "changelog=$changelog_content" >> "$GITHUB_OUTPUT"
         
         # Cleanup temp file
         rm -f CHANGELOG_TEMP.md
