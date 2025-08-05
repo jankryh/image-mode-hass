@@ -91,7 +91,7 @@ DEBUG = false                          # Enable debug mode
 # config-dockerhub.mk
 REGISTRY = docker.io/myusername
 IMAGE_NAME = home-assistant-bootc
-CONFIG_FILE = config-production.json
+CONFIG_FILE = config-production.toml
 ```
 
 ### GitHub Container Registry
@@ -99,7 +99,16 @@ CONFIG_FILE = config-production.json
 # config-ghcr.mk
 REGISTRY = ghcr.io/myusername
 IMAGE_NAME = home-assistant-bootc
-CONFIG_FILE = config-production.json
+CONFIG_FILE = config-production.toml
+```
+
+### Registry Publishing
+```makefile
+# config-quay.mk
+REGISTRY = quay.io/myorganization
+IMAGE_NAME = home-assistant-bootc
+IMAGE_TAG = v1.0.0
+CONFIG_FILE = config-production.toml
 ```
 
 ### Local Development
@@ -135,6 +144,7 @@ make info                             # Show detailed build information
 ### Build Targets
 ```bash
 make build                            # Build container image
+make push                             # Push image to registry
 make qcow2                            # Build qcow2 VM image
 make iso                              # Build ISO installer
 make raw                              # Build raw disk image
@@ -189,6 +199,21 @@ make deploy-vm CONFIG_MK=config-small.mk
 echo "VM_MEMORY = 8192" > config-large.mk
 echo "VM_VCPUS = 4" >> config-large.mk
 make deploy-vm CONFIG_MK=config-large.mk
+```
+
+### Scenario 4: Registry Publishing Workflow
+```bash
+# Create publishing configuration
+echo "REGISTRY = quay.io/myorg" > config-publish.mk
+echo "IMAGE_TAG = v1.0.0" >> config-publish.mk
+
+# Build and publish
+make build CONFIG_MK=config-publish.mk
+sudo podman login quay.io
+make push CONFIG_MK=config-publish.mk
+
+# Verify in registry web interface
+echo "Check https://quay.io/repository/myorg/fedora-bootc-hass"
 ```
 
 ## 🔧 Advanced Configuration

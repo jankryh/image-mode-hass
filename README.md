@@ -15,11 +15,15 @@ git clone https://github.com/YOUR_USERNAME/home-assistant-bootc.git
 cd home-assistant-bootc
 
 # Configure your settings
-cp config-example.json config.toml
+cp config-example.toml config.toml
 # Edit config.toml with your SSH key and preferences
 
 # Build the image
 sudo make build
+
+# Optional: Publish to registry
+sudo podman login quay.io
+sudo make push
 
 # Deploy as VM
 sudo make qcow2
@@ -34,6 +38,7 @@ sudo make iso
 - [Features](#-features)
 - [Requirements](#-requirements)
 - [Preparation and Build](#-preparation-and-build)
+- [Publishing to Registry](#-publishing-to-registry-optional)
 - [Deployment](#-deployment)
 - [System Management and Updates](#-system-management-and-updates)
 - [Home Assistant Configuration](#%EF%B8%8F-home-assistant-configuration)
@@ -130,6 +135,104 @@ sudo make build
 
 # Option B: Direct podman build
 sudo podman build -t quay.io/rh-ee-jkryhut/fedora-bootc-hass .
+```
+
+## 📤 Publishing to Registry (Optional)
+
+If you want to share your image or deploy it on remote systems, you can push it to a container registry like Quay.io.
+
+### Step 1: Log in to Quay.io
+You need to authenticate with the Quay.io registry. Podman will securely store your credentials for the push command.
+
+Run the following command. It will prompt you for your Quay.io username and password:
+
+```bash
+sudo podman login quay.io
+```
+
+**Enter your credentials:**
+- **Username**: Your Quay.io username
+- **Password**: You can use your password or, for better security, a robot account token or an encrypted password. You can create these in your Quay.io user settings.
+
+You should see a "Login Succeeded!" message.
+
+### Step 2: Push the Image
+Now that you are authenticated, you can push the image. Because you tagged it correctly with the `-t` flag during the build, the command is very simple:
+
+```bash
+# Option A: Using Make (recommended)
+sudo make push
+
+# Option B: Direct podman push
+sudo podman push quay.io/rh-ee-jkryhut/fedora-bootc-hass
+```
+
+Podman will now read the image layers from your local storage and upload them to your repository on Quay.io. You will see a progress bar for the upload.
+
+### Step 3: Verify Upload
+After the push completes successfully:
+
+1. **Check Quay.io web interface**: Visit [quay.io](https://quay.io) and navigate to your repository
+2. **Verify tags**: Ensure your image appears with the correct tag
+3. **Set repository visibility**: Configure public/private access as needed
+
+### Alternative Registries
+You can also push to other registries by changing the configuration:
+
+```bash
+# Docker Hub example
+REGISTRY=docker.io/yourusername make build
+sudo make push
+
+# GitHub Container Registry example  
+REGISTRY=ghcr.io/yourusername make build
+sudo make push
+
+# Private registry example
+REGISTRY=your-registry.com/namespace make build
+sudo make push
+```
+
+### 🔐 Security Best Practices
+
+#### Using Robot Accounts (Recommended)
+For automated builds and better security, use robot accounts instead of personal credentials:
+
+1. **Create Robot Account**: In Quay.io settings, create a robot account
+2. **Set Permissions**: Grant only necessary push/pull permissions
+3. **Use Robot Token**: Use the robot account token instead of your password
+
+```bash
+# Login with robot account
+sudo podman login quay.io
+Username: yourorg+robotname
+Password: <robot_token>
+```
+
+#### CI/CD Integration
+For automated builds in CI/CD pipelines:
+
+```bash
+# Set credentials as environment variables
+export REGISTRY_USER="yourorg+robotname"
+export REGISTRY_PASSWORD="robot_token"
+
+# Login non-interactively
+echo "$REGISTRY_PASSWORD" | sudo podman login quay.io -u "$REGISTRY_USER" --password-stdin
+
+# Build and push
+sudo make build
+sudo make push
+```
+
+### 📊 Registry Configuration
+Update your configuration for different registries:
+
+```makefile
+# In your custom config-*.mk file
+REGISTRY = quay.io/yourorganization
+IMAGE_NAME = home-assistant-bootc
+IMAGE_TAG = v1.0.0
 ```
 
 ## 🚀 Deployment
@@ -300,6 +403,7 @@ sudo reboot
 # Build and deployment
 make help                    # Show all available targets
 make build                   # Build container image
+make push                    # Push image to registry (requires login)
 make all                     # Build all formats (container, qcow2, iso)
 make qcow2                   # Create VM disk image
 make iso                     # Create bootable ISO
@@ -556,6 +660,19 @@ sudo /opt/hass-scripts/backup-hass.sh
 # View logs
 sudo journalctl -u home-assistant
 sudo podman logs home-assistant
+```
+
+### Build & Publish Workflow
+```bash
+# Complete build and publish workflow
+sudo make build                    # Build container image
+sudo podman login quay.io         # Authenticate with registry
+sudo make push                     # Push to registry
+
+# Or build specific deployment formats
+sudo make qcow2                    # For VM deployment
+sudo make iso                      # For hardware installation
+sudo make raw                      # For cloud deployment
 ```
 
 ### Configuration Files
