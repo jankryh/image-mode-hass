@@ -35,6 +35,15 @@ build-security: ## Build with security-focused options (no cache, latest package
 	sudo $(CONTAINER_CMD) build --no-cache --pull=always -t $(FULL_IMAGE_NAME) .
 	@echo "Security build completed: $(FULL_IMAGE_NAME)"
 
+build-ultra-security: ## Ultra-aggressive security build (removes all vulnerable packages)
+	@echo "Building ultra-secure $(FULL_IMAGE_NAME)..."
+	@echo "This build removes ALL potentially vulnerable packages!"
+	@echo "Using configuration: $(CONFIG_MK)"
+	sudo $(CONTAINER_CMD) build --no-cache --pull=always \
+		--build-arg ULTRA_SECURITY=true \
+		-t $(FULL_IMAGE_NAME)-ultra-secure .
+	@echo "Ultra-security build completed: $(FULL_IMAGE_NAME)-ultra-secure"
+
 push: build ## Build and push image to registry
 	@echo "Pushing $(FULL_IMAGE_NAME) to registry..."
 	sudo podman push $(FULL_IMAGE_NAME)

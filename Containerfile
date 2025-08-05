@@ -10,6 +10,9 @@ FROM quay.io/fedora/fedora-bootc:42
 # Copy repository configurations
 COPY repos/zerotier.repo /etc/yum.repos.d/zerotier.repo
 
+# AGGRESSIVE SECURITY FIXES - Remove vulnerable packages before install
+RUN dnf -y remove toolbox container-tools golang || true
+
 # Upgrade all packages to latest versions (security fix)
 RUN dnf -y upgrade --refresh
 
@@ -34,11 +37,17 @@ RUN dnf -y install \
     logrotate \
     && dnf clean all
 
-# Remove potentially problematic packages that are not needed
-RUN dnf -y remove toolbox || true
+# SECURITY: Force install latest secure versions of specific packages
+RUN dnf -y upgrade python3-urllib3 || pip3 install --upgrade urllib3==2.5.0 || true
 
-# Force upgrade specific vulnerable packages
-RUN dnf -y upgrade python3-urllib3 golang || true
+# SECURITY: Completely remove toolbox and all Go dependencies
+RUN dnf -y remove toolbox golang golang-bin container-tools \
+    buildah skopeo podman-compose || true
+
+# SECURITY: Force clean package cache and remove development packages
+RUN dnf -y remove gcc gcc-c++ make automake autoconf libtool || true && \
+    dnf clean all && \
+    rm -rf /var/cache/dnf/* /tmp/* /var/tmp/*
 
 # Configure firewall rules
 RUN firewall-offline-cmd --add-port=8123/tcp && \
