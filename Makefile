@@ -36,8 +36,8 @@ CACHE_REGISTRY ?= $(REGISTRY)/$(IMAGE_NAME)-cache
 CACHE_TAG ?= latest
 
 # Build targets with performance focus
-.PHONY: help build build-optimized build-security build-parallel push clean qcow2 qcow2-optimized iso raw deploy-vm deploy-vm-optimized status status-detailed
-.PHONY: dev-build dev-qcow2 dev-deploy all vm clean-vm clean-optimized cache-push cache-pull cache-clean pull-deps
+.PHONY: help build build-basic build-security build-parallel push clean qcow2 qcow2-basic iso raw deploy-vm deploy-vm-basic status status-detailed
+.PHONY: dev-build dev-qcow2 dev-deploy all vm clean-vm clean-cache cache-push cache-pull cache-clean pull-deps
 .PHONY: config-create config-show config-template validate-config info benchmark
 .PHONY: deps-update deps-check performance-test
 
@@ -53,19 +53,18 @@ help: ## Show this help message with performance features
 	@echo "Available targets:"
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-# PERFORMANCE: Optimized build with advanced caching
-build-optimized: cache-pull ## High-performance optimized build
-	@echo "🚀 Building optimized $(FULL_IMAGE_NAME)..."
+# High-performance build with advanced caching (now standard)
+build: cache-pull ## High-performance build with caching and optimization
+	@echo "🚀 Building $(FULL_IMAGE_NAME)..."
 	@echo "💡 Using: $(BUILD_CPUS) CPUs, $(BUILD_MEMORY) memory"
 	@echo "📦 Configuration: $(CONFIG_MK)"
 	time sudo $(CONTAINER_CMD) build $(BUILD_FLAGS) \
 		-t $(FULL_IMAGE_NAME) \
-		-t $(FULL_IMAGE_NAME)-optimized \
 		--cache-to=type=registry,ref=$(CACHE_REGISTRY):$(CACHE_TAG) \
 		.
-	@echo "✅ Optimized build completed: $(FULL_IMAGE_NAME)"
+	@echo "✅ Build completed: $(FULL_IMAGE_NAME)"
 
-# PERFORMANCE: Parallel build for development
+# Parallel build for maximum performance
 build-parallel: ## Parallel build with maximum performance
 	@echo "⚡ Parallel build with $(shell nproc) CPUs..."
 	sudo $(CONTAINER_CMD) build \
@@ -75,11 +74,11 @@ build-parallel: ## Parallel build with maximum performance
 		$(BUILD_FLAGS) \
 		-t $(FULL_IMAGE_NAME) .
 
-# PERFORMANCE: Standard build process
-build: ## Standard build process
-	@echo "Building $(FULL_IMAGE_NAME)..."
+# Basic build without optimizations (legacy)
+build-basic: ## Basic build without advanced optimizations
+	@echo "Building $(FULL_IMAGE_NAME) (basic mode)..."
 	@echo "Using configuration: $(CONFIG_MK)"
-	sudo $(CONTAINER_CMD) build $(BUILD_FLAGS) -t $(FULL_IMAGE_NAME) .
+	sudo $(CONTAINER_RUNTIME) build --no-cache -t $(FULL_IMAGE_NAME) .
 	@echo "Build completed: $(FULL_IMAGE_NAME)"
 
 # PERFORMANCE: Security build with optimizations
@@ -118,9 +117,9 @@ pull-deps: ## Pull required base images
 	podman pull quay.io/fedora/fedora-bootc:latest
 	podman pull quay.io/centos-bootc/bootc-image-builder:latest
 
-# PERFORMANCE: Optimized image creation with parallel processing
-qcow2-optimized: build-optimized pull-deps ## Build optimized qcow2 with performance tuning
-	@echo "💾 Building optimized qcow2 image..."
+# High-performance qcow2 image creation (now standard)
+qcow2: build pull-deps ## Build high-performance qcow2 with compression and tuning
+	@echo "💾 Building qcow2 image..."
 	@mkdir -p $(OUTPUT_DIR)
 	time sudo podman run \
 		--rm --privileged --pull=newer \
@@ -135,10 +134,11 @@ qcow2-optimized: build-optimized pull-deps ## Build optimized qcow2 with perform
 		--config /config.toml \
 		--compress \
 		$(FULL_IMAGE_NAME)
-	@echo "✅ Optimized qcow2 created in $(OUTPUT_DIR)/"
+	@echo "✅ qcow2 image created in $(OUTPUT_DIR)/"
 
-qcow2: build pull-deps ## Standard qcow2 build
-	@echo "Building qcow2 image..."
+# Basic qcow2 without performance optimizations (legacy)
+qcow2-basic: build pull-deps ## Basic qcow2 build without optimizations
+	@echo "Building basic qcow2 image..."
 	@mkdir -p $(OUTPUT_DIR)
 	@echo "Using configuration file: $(CONFIG_FILE)"
 	sudo podman run \
@@ -152,7 +152,7 @@ qcow2: build pull-deps ## Standard qcow2 build
 		--rootfs $(ROOTFS_TYPE) \
 		--config /config.toml \
 		$(FULL_IMAGE_NAME)
-	@echo "qcow2 image created in $(OUTPUT_DIR)/"
+	@echo "Basic qcow2 image created in $(OUTPUT_DIR)/"
 
 iso: build pull-deps ## Build ISO installer
 	@echo "Building ISO installer..."
@@ -188,9 +188,9 @@ raw: build pull-deps ## Build raw disk image
 		$(FULL_IMAGE_NAME)
 	@echo "Raw disk image created in $(OUTPUT_DIR)/"
 
-# OPTIMIZED DEPLOYMENT
-deploy-vm-optimized: qcow2-optimized ## Deploy optimized VM with performance tuning
-	@echo "🚀 Deploying optimized VM: $(VM_NAME)"
+# High-performance VM deployment (now standard)
+deploy-vm: qcow2 ## Deploy high-performance VM with optimized settings
+	@echo "🚀 Deploying VM: $(VM_NAME)"
 	@echo "⚙️ Configuration: Memory=$(VM_MEMORY)MB, vCPUs=$(VM_VCPUS)"
 	sudo mv $(OUTPUT_DIR)/qcow2/disk.qcow2 /var/lib/libvirt/images/$(VM_NAME).qcow2
 	sudo virt-install \
@@ -205,10 +205,11 @@ deploy-vm-optimized: qcow2-optimized ## Deploy optimized VM with performance tun
 		--features acpi=on,apic=on \
 		--clock offset=utc \
 		$(if $(filter none,$(VM_GRAPHICS)),--noautoconsole,)
-	@echo "✅ Optimized VM deployed successfully"
+	@echo "✅ VM deployed successfully"
 
-deploy-vm: qcow2 ## Deploy VM using libvirt
-	@echo "Deploying VM: $(VM_NAME)"
+# Basic VM deployment without performance optimizations (legacy)
+deploy-vm-basic: qcow2-basic ## Deploy basic VM without performance tuning
+	@echo "Deploying basic VM: $(VM_NAME)"
 	@echo "Configuration: Memory=$(VM_MEMORY)MB, vCPUs=$(VM_VCPUS), Network=$(VM_NETWORK)"
 	sudo mv $(OUTPUT_DIR)/qcow2/disk.qcow2 /var/lib/libvirt/images/$(VM_NAME).qcow2
 	sudo virt-install \
@@ -221,7 +222,7 @@ deploy-vm: qcow2 ## Deploy VM using libvirt
 		--graphics $(VM_GRAPHICS) \
 		--os-variant $(VM_OS_VARIANT) \
 		$(if $(filter none,$(VM_GRAPHICS)),--noautoconsole,)
-	@echo "VM deployed successfully"
+	@echo "Basic VM deployed successfully"
 
 # DEPENDENCY MANAGEMENT: Advanced dependency handling
 deps-update: ## Update and optimize dependencies
@@ -235,9 +236,9 @@ deps-check: ## Check dependency versions and security
 	@echo "✅ Dependency check completed"
 
 # PERFORMANCE MONITORING
-benchmark: build-optimized ## Benchmark build performance
+benchmark: build ## Benchmark build performance
 	@echo "⏱️ Benchmarking build performance..."
-	@time $(MAKE) clean && time $(MAKE) build-optimized
+	@time $(MAKE) clean && time $(MAKE) build
 	@echo "📊 Benchmark completed"
 
 performance-test: ## Run comprehensive performance tests
@@ -284,10 +285,10 @@ clean: ## Clean up build artifacts
 	@sudo podman system prune -f
 	@echo "Cleanup completed"
 
-clean-optimized: ## Comprehensive cleanup including cache
+clean-cache: ## Comprehensive cleanup including cache
 	@echo "🧹 Comprehensive cleanup..."
 	@rm -rf $(OUTPUT_DIR)
-	@sudo $(CONTAINER_CMD) rmi $(FULL_IMAGE_NAME) $(FULL_IMAGE_NAME)-optimized 2>/dev/null || true
+	@sudo $(CONTAINER_CMD) rmi $(FULL_IMAGE_NAME) 2>/dev/null || true
 	@sudo $(CONTAINER_CMD) rmi $(CACHE_REGISTRY):$(CACHE_TAG) 2>/dev/null || true
 	@sudo $(CONTAINER_CMD) system prune -af --volumes
 	@echo "✅ Cleanup completed"
@@ -379,5 +380,5 @@ config-show: ## Show current configuration values
 	@echo "USE_CACHE = $(USE_CACHE)"
 	@echo "VERBOSE = $(VERBOSE)"
 
-# Default to optimized build
-.DEFAULT_GOAL := build-optimized
+# Default to high-performance build
+.DEFAULT_GOAL := build
