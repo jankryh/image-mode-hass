@@ -3,8 +3,89 @@
 
 set -euo pipefail
 
-# Source test framework
-source "$(dirname "$0")/../test-framework.sh"
+# Simplified integration test for bash 3.x compatibility
+set -euo pipefail
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+# Test framework functions
+assert_file_exists() {
+    local file="$1"
+    local message="${2:-File should exist}"
+    
+    if [[ ! -f "$file" ]]; then
+        echo -e "${RED}FAIL:${NC} $message - File not found: $file"
+        return 1
+    fi
+    echo -e "${GREEN}PASS:${NC} $message"
+    return 0
+}
+
+assert_dir_exists() {
+    local dir="$1"
+    local message="${2:-Directory should exist}"
+    
+    if [[ ! -d "$dir" ]]; then
+        echo -e "${RED}FAIL:${NC} $message - Directory not found: $dir"
+        return 1
+    fi
+    echo -e "${GREEN}PASS:${NC} $message"
+    return 0
+}
+
+assert_command_exists() {
+    local cmd="$1"
+    local message="${2:-Command should exist}"
+    
+    if ! command -v "$cmd" &>/dev/null; then
+        echo -e "${YELLOW}SKIP:${NC} $message - Command not available: $cmd"
+        return 0  # Skip rather than fail
+    fi
+    echo -e "${GREEN}PASS:${NC} $message"
+    return 0
+}
+
+assert_true() {
+    local condition="$1"
+    local message="${2:-Condition should be true}"
+    
+    if ! eval "$condition"; then
+        echo -e "${RED}FAIL:${NC} $message"
+        return 1
+    fi
+    echo -e "${GREEN}PASS:${NC} $message"
+    return 0
+}
+
+assert_contains() {
+    local haystack="$1"
+    local needle="$2"
+    local message="${3:-String should contain substring}"
+    
+    if [[ ! "$haystack" == *"$needle"* ]]; then
+        echo -e "${RED}FAIL:${NC} $message"
+        return 1
+    fi
+    echo -e "${GREEN}PASS:${NC} $message"
+    return 0
+}
+
+assert_exit_code() {
+    local expected="$1"
+    local actual="$2"
+    local message="${3:-Exit code should match}"
+    
+    if [[ "$expected" -ne "$actual" ]]; then
+        echo -e "${RED}FAIL:${NC} $message (expected: $expected, got: $actual)"
+        return 1
+    fi
+    echo -e "${GREEN}PASS:${NC} $message"
+    return 0
+}
 
 # Setup
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -100,21 +181,29 @@ test_scripts_structure() {
 
 # Run all tests
 main() {
-    init_tests
+    echo "Running integration tests..."
+    local failed=0
     
-    run_test "Makefile exists" test_makefile_exists
-    run_test "Containerfile exists" test_containerfile_exists
-    run_test "Configuration files exist" test_config_files
-    run_test "Makefile syntax validation" test_makefile_syntax
-    run_test "Build dependencies check" test_build_dependencies
-    run_test "Containerfile syntax validation" test_containerfile_syntax
-    run_test "Multi-stage build structure" test_multistage_build
-    run_test "Build cache optimization" test_build_cache
-    run_test "Security hardening checks" test_security_hardening
-    run_test "Repository files check" test_repo_files
-    run_test "Scripts directory structure" test_scripts_structure
+    test_makefile_exists || failed=$((failed + 1))
+    test_containerfile_exists || failed=$((failed + 1))
+    test_config_files || failed=$((failed + 1))
+    test_makefile_syntax || failed=$((failed + 1))
+    test_build_dependencies || failed=$((failed + 1))
+    test_containerfile_syntax || failed=$((failed + 1))
+    test_multistage_build || failed=$((failed + 1))
+    test_build_cache || failed=$((failed + 1))
+    test_security_hardening || failed=$((failed + 1))
+    test_repo_files || failed=$((failed + 1))
+    test_scripts_structure || failed=$((failed + 1))
     
-    print_summary
+    echo ""
+    if [[ $failed -eq 0 ]]; then
+        echo -e "${GREEN}All tests passed!${NC}"
+        return 0
+    else
+        echo -e "${RED}$failed tests failed!${NC}"
+        return 1
+    fi
 }
 
 # Run tests if executed directly

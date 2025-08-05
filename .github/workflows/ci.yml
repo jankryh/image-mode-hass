@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: quay.io
+  REGISTRY: quay.io  # Změňte na docker.io, ghcr.io, nebo jiný registry
   IMAGE_NAME: ${{ github.repository_owner }}/fedora-bootc-hass
   PODMAN_VERSION: latest
 
@@ -84,10 +84,10 @@ jobs:
         sudo apt-get update
         sudo apt-get -y install podman
 
-    - name: Log in to Quay.io
-      if: github.event_name != 'pull_request'
+    - name: Log in to Registry
+      if: github.event_name != 'pull_request' && secrets.QUAY_USERNAME != ''
       run: |
-        echo "${{ secrets.QUAY_PASSWORD }}" | podman login quay.io \
+        echo "${{ secrets.QUAY_PASSWORD }}" | podman login ${{ env.REGISTRY }} \
           --username "${{ secrets.QUAY_USERNAME }}" \
           --password-stdin
 
@@ -131,7 +131,7 @@ jobs:
           ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
 
     - name: Push image
-      if: github.event_name != 'pull_request' && success()
+      if: github.event_name != 'pull_request' && success() && secrets.QUAY_USERNAME != ''
       run: |
         podman push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
         podman push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.commit_sha }}

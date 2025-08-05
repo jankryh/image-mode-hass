@@ -16,8 +16,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Test categories
-declare -a TEST_CATEGORIES=("scripts" "integration")
-declare -A TEST_RESULTS
+TEST_CATEGORIES=("scripts" "integration")
+
+# Results storage (compatible with older bash)
+RESULTS_FILE="/tmp/test-results-$$"
+touch "$RESULTS_FILE"
 
 # Print header
 print_header() {
@@ -62,10 +65,10 @@ run_category_tests() {
         
         if bash "$test_file"; then
             category_passed=$((category_passed + 1))
-            TEST_RESULTS["$category/$test_name"]="PASSED"
+            echo "PASSED:$category/$test_name" >> "$RESULTS_FILE"
         else
             category_failed=$((category_failed + 1))
-            TEST_RESULTS["$category/$test_name"]="FAILED"
+            echo "FAILED:$category/$test_name" >> "$RESULTS_FILE"
         fi
     done
     
@@ -85,20 +88,26 @@ print_final_summary() {
     local total_passed=0
     local total_failed=0
     
-    for test in "${!TEST_RESULTS[@]}"; do
-        if [[ "${TEST_RESULTS[$test]}" == "PASSED" ]]; then
-            echo -e "${GREEN}✓ $test${NC}"
-            total_passed=$((total_passed + 1))
-        else
-            echo -e "${RED}✗ $test${NC}"
-            total_failed=$((total_failed + 1))
-        fi
-    done | sort
+    # Read results from file and sort
+    if [[ -f "$RESULTS_FILE" ]]; then
+        while IFS=: read -r status test_name; do
+            if [[ "$status" == "PASSED" ]]; then
+                echo -e "${GREEN}✓ $test_name${NC}"
+                total_passed=$((total_passed + 1))
+            else
+                echo -e "${RED}✗ $test_name${NC}"
+                total_failed=$((total_failed + 1))
+            fi
+        done < <(sort "$RESULTS_FILE")
+    fi
     
     echo -e "\n${BLUE}Total Results:${NC}"
     echo -e "  Tests Run:    $((total_passed + total_failed))"
     echo -e "  ${GREEN}Passed:      $total_passed${NC}"
     echo -e "  ${RED}Failed:      $total_failed${NC}"
+    
+    # Cleanup
+    rm -f "$RESULTS_FILE"
     
     if [[ $total_failed -eq 0 ]]; then
         echo -e "\n${GREEN}╔════════════════════════════════════════════════╗${NC}"
