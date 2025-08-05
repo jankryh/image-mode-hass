@@ -26,7 +26,11 @@ error() {
 if [ $# -eq 0 ]; then
     error "Usage: $0 <backup_directory>"
     echo "Available backups:"
-    ls -la /var/home-assistant/backups/ 2>/dev/null | grep "hass-backup-" || echo "No backups found"
+    if compgen -G "/var/home-assistant/backups/hass-backup-*" > /dev/null 2>&1; then
+        ls -la /var/home-assistant/backups/hass-backup-* 2>/dev/null
+    else
+        echo "No backups found"
+    fi
     exit 1
 fi
 

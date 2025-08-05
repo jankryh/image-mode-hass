@@ -22,7 +22,6 @@ NC='\033[0m' # No Color
 # Performance thresholds
 BOOT_TIME_THRESHOLD=120    # seconds
 MEMORY_THRESHOLD=80        # percentage
-CPU_THRESHOLD=80           # percentage
 DISK_IO_THRESHOLD=100      # MB/s minimum
 
 # Test results storage
@@ -106,7 +105,7 @@ test_cpu_performance() {
     # CPU benchmark using sysbench
     info "Running CPU benchmark (prime numbers calculation)..."
     local cpu_result
-    cpu_result=$(sysbench cpu --cpu-max-prime=20000 --threads=$(nproc) run | grep "events per second:" | awk '{print $4}')
+    cpu_result=$(sysbench cpu --cpu-max-prime=20000 --threads="$(nproc)" run | grep "events per second:" | awk '{print $4}')
     
     test_results["cpu_events_per_second"]="$cpu_result"
     log "CPU performance: $cpu_result events/second"
@@ -116,7 +115,7 @@ test_cpu_performance() {
     local cpu_usage_before cpu_usage_after
     cpu_usage_before=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d'%' -f1)
     
-    stress --cpu $(nproc) --timeout 30s >/dev/null 2>&1 &
+    stress --cpu "$(nproc)" --timeout 30s >/dev/null 2>&1 &
     local stress_pid=$!
     
     sleep 10  # Let stress settle

@@ -11,7 +11,6 @@ source "$SCRIPT_DIR/lib/common.sh"
 # Configuration
 REPORT_DIR="${HOME}/.hass-security-reports"
 IMAGE_NAME="${REGISTRY:-quay.io}/${IMAGE_NAME:-$USER/fedora-bootc-hass}"
-TEMP_CONTAINER_NAME="security-check-$$"
 
 # Colors for output
 RED='\033[0;31m'
@@ -103,7 +102,8 @@ run_security_scan() {
     info "Severity levels: $severity"
     
     mkdir -p "$REPORT_DIR"
-    local scan_timestamp=$(date +"%Y%m%d_%H%M%S")
+    local scan_timestamp
+    scan_timestamp=$(date +"%Y%m%d_%H%M%S")
     local base_filename="$REPORT_DIR/security_scan_${scan_timestamp}"
     
     # Determine container runtime
@@ -182,10 +182,11 @@ EOF
     
     # Count vulnerabilities by severity
     if command -v jq &> /dev/null; then
-        local critical=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' "$json_file")
-        local high=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' "$json_file")
-        local medium=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "MEDIUM")] | length' "$json_file")
-        local low=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "LOW")] | length' "$json_file")
+        local critical high medium low
+        critical=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' "$json_file")
+        high=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' "$json_file")
+        medium=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "MEDIUM")] | length' "$json_file")
+        low=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "LOW")] | length' "$json_file")
         
         echo "- 🔴 Critical: $critical" >> "$summary_file"
         echo "- 🟠 High: $high" >> "$summary_file"
