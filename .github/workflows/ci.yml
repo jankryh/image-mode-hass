@@ -85,11 +85,19 @@ jobs:
         sudo apt-get -y install podman
 
     - name: Log in to Registry
-      if: github.event_name != 'pull_request' && secrets.QUAY_USERNAME != ''
+      if: github.event_name != 'pull_request' && vars.ENABLE_REGISTRY_PUSH == 'true'
+      env:
+        QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+        QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
       run: |
-        echo "${{ secrets.QUAY_PASSWORD }}" | podman login ${{ env.REGISTRY }} \
-          --username "${{ secrets.QUAY_USERNAME }}" \
-          --password-stdin
+        if [ -n "$QUAY_USERNAME" ] && [ -n "$QUAY_PASSWORD" ]; then
+          echo "$QUAY_PASSWORD" | podman login ${{ env.REGISTRY }} \
+            --username "$QUAY_USERNAME" \
+            --password-stdin
+        else
+          echo "Registry credentials not available, skipping login"
+          exit 0
+        fi
 
     - name: Set up build metadata
       id: meta
@@ -131,10 +139,18 @@ jobs:
           ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
 
     - name: Push image
-      if: github.event_name != 'pull_request' && success() && secrets.QUAY_USERNAME != ''
+      if: github.event_name != 'pull_request' && success() && vars.ENABLE_REGISTRY_PUSH == 'true'
+      env:
+        QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+        QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
       run: |
-        podman push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
-        podman push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.commit_sha }}
+        if [ -n "$QUAY_USERNAME" ] && [ -n "$QUAY_PASSWORD" ]; then
+          podman push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+          podman push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.commit_sha }}
+        else
+          echo "Registry credentials not available, skipping push"
+          exit 0
+        fi
 
   build-artifacts:
     name: Build Deployment Artifacts
