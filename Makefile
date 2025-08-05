@@ -118,10 +118,11 @@ qcow2: build pull-deps ## Build high-performance qcow2 with compression and tuni
 	@echo "💾 Building qcow2 image..."
 	@echo "⚠️  Note: bootc-image-builder requires rootful podman daemon"
 	@mkdir -p $(OUTPUT_DIR)
-	@if podman info --format='{{.Host.Security.Rootless}}' 2>/dev/null | grep -q true; then \
-		echo "⚠️  Detected rootless podman - switching to system podman"; \
-		sudo systemctl start podman.socket || true; \
-		time sudo CONTAINER_HOST='unix:///run/podman/podman.sock' podman run \
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		echo "📍 On macOS: Using podman machine for ISO build"; \
+		podman machine set --rootful || true; \
+		podman machine start || true; \
+		time sudo podman run \
 			--rm --privileged --pull=newer \
 			$(RUN_FLAGS) \
 			--memory=8g --cpus=$(shell nproc) \
@@ -157,10 +158,13 @@ qcow2-basic: build pull-deps ## Basic qcow2 build without optimizations (require
 	@echo "⚠️  Note: bootc-image-builder requires rootful podman daemon"
 	@mkdir -p $(OUTPUT_DIR)
 	@echo "Using configuration file: $(CONFIG_FILE)"
-	@if podman info --format='{{.Host.Security.Rootless}}' 2>/dev/null | grep -q true; then \
-		echo "⚠️  Detected rootless podman - switching to system podman"; \
-		sudo systemctl start podman.socket || true; \
-		sudo CONTAINER_HOST='unix:///run/podman/podman.sock' podman run \
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		echo "📍 On macOS: Configuring podman machine for rootful mode"; \
+		podman machine stop 2>/dev/null || true; \
+		podman machine set --rootful || echo "⚠️  Failed to set rootful mode"; \
+		podman machine start || echo "⚠️  Failed to start machine"; \
+		sleep 3; \
+		sudo podman run \
 			--rm -it --privileged --pull=newer \
 			--security-opt label=type:unconfined_t \
 			-v /var/lib/containers/storage:/var/lib/containers/storage \
@@ -191,10 +195,13 @@ iso: build pull-deps ## Build ISO installer (requires rootful podman)
 	@echo "⚠️  Note: bootc-image-builder requires rootful podman daemon"
 	@mkdir -p $(OUTPUT_DIR)
 	@echo "Using configuration file: $(CONFIG_FILE)"
-	@if podman info --format='{{.Host.Security.Rootless}}' 2>/dev/null | grep -q true; then \
-		echo "⚠️  Detected rootless podman - switching to system podman"; \
-		sudo systemctl start podman.socket || true; \
-		sudo CONTAINER_HOST='unix:///run/podman/podman.sock' podman run \
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		echo "📍 On macOS: Configuring podman machine for rootful mode"; \
+		podman machine stop 2>/dev/null || true; \
+		podman machine set --rootful || echo "⚠️  Failed to set rootful mode"; \
+		podman machine start || echo "⚠️  Failed to start machine"; \
+		sleep 3; \
+		sudo podman run \
 			--rm -it --privileged --pull=newer \
 			--security-opt label=type:unconfined_t \
 			-v /var/lib/containers/storage:/var/lib/containers/storage \
@@ -225,10 +232,13 @@ raw: build pull-deps ## Build raw disk image (requires rootful podman)
 	@echo "⚠️  Note: bootc-image-builder requires rootful podman daemon"
 	@mkdir -p $(OUTPUT_DIR)
 	@echo "Using configuration file: $(CONFIG_FILE)"
-	@if podman info --format='{{.Host.Security.Rootless}}' 2>/dev/null | grep -q true; then \
-		echo "⚠️  Detected rootless podman - switching to system podman"; \
-		sudo systemctl start podman.socket || true; \
-		sudo CONTAINER_HOST='unix:///run/podman/podman.sock' podman run \
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		echo "📍 On macOS: Configuring podman machine for rootful mode"; \
+		podman machine stop 2>/dev/null || true; \
+		podman machine set --rootful || echo "⚠️  Failed to set rootful mode"; \
+		podman machine start || echo "⚠️  Failed to start machine"; \
+		sleep 3; \
+		sudo podman run \
 			--rm -it --privileged --pull=newer \
 			--security-opt label=type:unconfined_t \
 			-v /var/lib/containers/storage:/var/lib/containers/storage \
