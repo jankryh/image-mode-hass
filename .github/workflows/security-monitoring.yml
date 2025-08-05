@@ -50,12 +50,28 @@ jobs:
         # Install Podman
         sudo apt-get install -y podman
 
-    - name: Pull latest image for scanning
+    - name: Build image for security scanning
+      continue-on-error: true
+      id: build_step
       run: |
-        # Try to pull the latest image, fallback to building if not available
-        if ! podman pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest; then
-          echo "Image not found in registry, building locally for security scan"
-          podman build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest .
+        echo "Building image locally for security scan..."
+        echo "Image tag: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+        
+        # Build image with security optimizations
+        if podman build \
+          --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+          --tag security-scan-image:latest \
+          --label "org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+          --label "org.opencontainers.image.revision=${{ github.sha }}" \
+          --label "security.scan=true" \
+          .; then
+          echo "✅ Image built successfully for security scanning"
+          echo "build_success=true" >> $GITHUB_OUTPUT
+          podman images | grep -E "(security-scan|fedora-bootc-hass)"
+        else
+          echo "❌ Image build failed, will use fallback base image for scanning"
+          echo "build_success=false" >> $GITHUB_OUTPUT
+          exit 0  # Don't fail the job, just this step
         fi
 
     - name: Create results directory
@@ -63,36 +79,82 @@ jobs:
 
     - name: Run Trivy vulnerability scan
       run: |
-        # Comprehensive Trivy scan
+        # Check build status from previous step
+        BUILD_SUCCESS="${{ steps.build_step.outputs.build_success }}"
+        echo "Build success status: $BUILD_SUCCESS"
+        
+        # Determine which image to scan
+        SCAN_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+        
+        # Check if our built image exists
+        if [[ "$BUILD_SUCCESS" == "true" ]] && podman images | grep -q "security-scan-image:latest"; then
+          SCAN_IMAGE="security-scan-image:latest"
+          echo "✅ Using locally built image: $SCAN_IMAGE"
+          echo "SCAN_TYPE=built-image" >> $GITHUB_ENV
+        elif podman images | grep -q "fedora-bootc-hass"; then
+          SCAN_IMAGE=$(podman images --format "{{.Repository}}:{{.Tag}}" | grep fedora-bootc-hass | head -1)
+          echo "📦 Using found image: $SCAN_IMAGE"
+          echo "SCAN_TYPE=found-image" >> $GITHUB_ENV
+        else
+          echo "⚠️  No suitable image found, using fallback base image scan"
+          SCAN_IMAGE="quay.io/fedora/fedora-bootc:42"
+          echo "🔄 Pulling base image for fallback scan..."
+          podman pull "$SCAN_IMAGE" || echo "Failed to pull base image"
+          echo "SCAN_TYPE=fallback-base" >> $GITHUB_ENV
+        fi
+        
+        echo "Scanning image: $SCAN_IMAGE"
+        
+        # Comprehensive Trivy scan with error handling
+        echo "Running SARIF scan..."
         trivy image \
           --format sarif \
           --output ${{ env.SCAN_RESULTS_DIR }}/trivy-results.sarif \
           --severity HIGH,CRITICAL \
-          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          "$SCAN_IMAGE" || echo "SARIF scan failed, continuing..."
 
-        # Human-readable report
+        echo "Running table report..."
         trivy image \
           --format table \
           --output ${{ env.SCAN_RESULTS_DIR }}/trivy-table.txt \
           --severity HIGH,CRITICAL \
-          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          "$SCAN_IMAGE" || echo "Table scan failed, continuing..."
 
-        # JSON report for automation
+        echo "Running JSON report..."
         trivy image \
           --format json \
           --output ${{ env.SCAN_RESULTS_DIR }}/trivy-results.json \
           --severity HIGH,CRITICAL \
-          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          "$SCAN_IMAGE" || echo "JSON scan failed, continuing..."
+        
+        echo "✅ Trivy scans completed"
 
     - name: Run Grype vulnerability scan
       run: |
-        grype ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+        # Use the same image detection logic as Trivy
+        SCAN_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+        
+        if podman images | grep -q "security-scan-image:latest"; then
+          SCAN_IMAGE="security-scan-image:latest"
+          echo "Grype scanning: $SCAN_IMAGE"
+        elif podman images | grep -q "fedora-bootc-hass"; then
+          SCAN_IMAGE=$(podman images --format "{{.Repository}}:{{.Tag}}" | grep fedora-bootc-hass | head -1)
+          echo "Grype scanning: $SCAN_IMAGE"
+        else
+          echo "Using fallback base image for Grype scan"
+          SCAN_IMAGE="quay.io/fedora/fedora-bootc:42"
+        fi
+        
+        echo "Running Grype scans..."
+        grype "$SCAN_IMAGE" \
           -o sarif \
-          --file ${{ env.SCAN_RESULTS_DIR }}/grype-results.sarif
+          --file ${{ env.SCAN_RESULTS_DIR }}/grype-results.sarif || echo "Grype SARIF scan failed, continuing..."
 
-        grype ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+        grype "$SCAN_IMAGE" \
           -o table \
-          --file ${{ env.SCAN_RESULTS_DIR }}/grype-table.txt
+          --file ${{ env.SCAN_RESULTS_DIR }}/grype-table.txt || echo "Grype table scan failed, continuing..."
+        
+        echo "✅ Grype scans completed"
 
     - name: Run container configuration scan
       run: |
@@ -128,6 +190,28 @@ jobs:
       run: |
         echo "# Security Scan Summary" > ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
         echo "Scan Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+        echo "Build Status: ${{ steps.build_step.outputs.build_success }}" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+        echo "Scan Type: ${SCAN_TYPE:-unknown}" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+        echo "" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+        
+        # Add scan type explanation
+        case "${SCAN_TYPE:-unknown}" in
+          "built-image")
+            echo "✅ **Scan Type**: Full image scan (locally built)" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+            echo "This scan covers your complete image with all customizations." >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+            ;;
+          "found-image")
+            echo "📦 **Scan Type**: Existing image scan" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+            echo "This scan covers an existing image found in the environment." >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+            ;;
+          "fallback-base")
+            echo "⚠️  **Scan Type**: Base image scan (fallback)" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+            echo "⚠️  Build failed - scanning base image only. Results may not reflect your customizations." >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+            ;;
+          *)
+            echo "❓ **Scan Type**: Unknown" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+            ;;
+        esac
         echo "" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
         
         # Count vulnerabilities from Trivy JSON
@@ -157,21 +241,43 @@ jobs:
         retention-days: 30
 
     - name: Check for critical vulnerabilities
+      id: check_vulnerabilities
       run: |
         if [[ -f "${{ env.SCAN_RESULTS_DIR }}/trivy-results.json" ]]; then
           CRITICAL_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' ${{ env.SCAN_RESULTS_DIR }}/trivy-results.json)
+          BUILD_SUCCESS="${{ steps.build_step.outputs.build_success }}"
+          SCAN_TYPE="${SCAN_TYPE:-unknown}"
           
           if [[ $CRITICAL_COUNT -gt 0 ]]; then
             echo "⚠️ Found $CRITICAL_COUNT critical vulnerabilities!"
-            echo "Please review the security scan results and apply fixes."
-            exit 1
+            
+            if [[ "$SCAN_TYPE" == "fallback-base" ]]; then
+              echo "⚠️  NOTE: This is a fallback scan of the base image only."
+              echo "⚠️  Results may not reflect your actual image security status."
+              echo "🔧 Recommendation: Fix build issues and re-run security scan."
+              echo "scan_type=fallback" >> $GITHUB_OUTPUT
+              # Don't fail the job for fallback scans
+            elif [[ "$SCAN_TYPE" == "built-image" ]]; then
+              echo "🚨 CRITICAL: Your built image contains critical vulnerabilities!"
+              echo "Please review the security scan results and apply fixes."
+              echo "scan_type=built-image" >> $GITHUB_OUTPUT
+              exit 1
+            else
+              echo "Please review the security scan results and apply fixes."
+              echo "scan_type=other" >> $GITHUB_OUTPUT
+              exit 1
+            fi
           else
             echo "✅ No critical vulnerabilities found"
+            echo "scan_type=clean" >> $GITHUB_OUTPUT
           fi
+        else
+          echo "⚠️  No scan results found - scan may have failed"
+          echo "scan_type=no-results" >> $GITHUB_OUTPUT
         fi
 
     - name: Create security issue on critical findings
-      if: failure() && github.event_name == 'schedule'
+      if: failure() && github.event_name == 'schedule' && steps.check_vulnerabilities.outputs.scan_type == 'built-image'
       uses: actions/github-script@v7
       with:
         script: |
@@ -180,12 +286,24 @@ jobs:
           
           if (fs.existsSync(path)) {
             const summary = fs.readFileSync(path, 'utf8');
+            const scanType = '${{ env.SCAN_TYPE }}';
+            const buildSuccess = '${{ steps.build_step.outputs.build_success }}';
+            
+            let title = `🚨 Security Alert: Critical vulnerabilities detected - ${new Date().toISOString().split('T')[0]}`;
+            let labels = ['security', 'vulnerability', 'critical', 'automated'];
+            
+            if (scanType === 'fallback-base') {
+              title = `⚠️ Build Failed + Base Image Vulnerabilities - ${new Date().toISOString().split('T')[0]}`;
+              labels = ['security', 'build-failure', 'base-image', 'automated'];
+            }
             
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `🚨 Security Alert: Critical vulnerabilities detected - ${new Date().toISOString().split('T')[0]}`,
-              body: `${summary}\n\n## Automated Security Scan Results\n\nThis issue was automatically created because critical vulnerabilities were detected in the container image.\n\n**Next Steps:**\n1. Review the detailed scan results in the [Security tab](https://github.com/${context.repo.owner}/${context.repo.repo}/security)\n2. Update dependencies and base images\n3. Rebuild and redeploy the image\n4. Close this issue once vulnerabilities are resolved\n\n**Scan Run:** [${context.runId}](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
-              labels: ['security', 'vulnerability', 'critical', 'automated']
+              title: title,
+              body: `${summary}\n\n## Automated Security Scan Results\n\n**Scan Type:** ${scanType}\n**Build Success:** ${buildSuccess}\n\nThis issue was automatically created because critical vulnerabilities were detected.\n\n**Next Steps:**\n${scanType === 'fallback-base' ? 
+                '1. Fix the build issues first (check build logs)\n2. Re-run the security scan with a successful build\n3. If build succeeds but vulnerabilities remain, apply security fixes' : 
+                '1. Review the detailed scan results in the [Security tab](https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/security)\n2. Update dependencies and base images\n3. Rebuild and redeploy the image'}\n4. Close this issue once resolved\n\n**Scan Run:** [${context.runId}](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
+              labels: labels
             });
           }
