@@ -5,7 +5,7 @@
         {
           "name": "hass-admin",
           "password": "$6$CHANGE_THIS_SALT$CHANGE_THIS_HASH",
-          "key": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQ... your-public-key-here",
+          "key": "ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAQEAr4q+l5qWZEuPdcPEGKkQzfXBY3xqtU6d3g7mOGluNbtQZCOkyhYpTOuCfkfNZh6ZBLL89QCNFGCaoaqTu6lFSRLj+rdf4k3Fn6iATUMTZBMh3IX+U2uZ8CQmiqmOPQouSYa5F3LUFwj55Kw6kVm30jLI3oNsgnno8+No/0hiC6vTqGPxuUkRPr1YyNIMZZHSs7IsGBF3gxaM3ZdCattoPEuzCO/vk7oCoxmQDM8Fk5tKut5DtRrfKNLhf9rL6t5M3MFApOhy2HRZb7O6Jf/Xjj4XjIP8b/qrUXum8Jnyl2w44QILKoy8I8bNviMD1JJvxiYM+TBRfLykWtrw6pYACQ==",
           "groups": [
             "wheel",
             "systemd-journal"

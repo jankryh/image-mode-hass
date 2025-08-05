@@ -2,7 +2,7 @@
 
 # Variables
 IMAGE_NAME ?= fedora-bootc-hass
-REGISTRY ?= quay.io/jwerak
+REGISTRY ?= quay.io/rh-ee-jkryhut
 IMAGE_TAG ?= latest
 FULL_IMAGE_NAME = $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)
 CONFIG_FILE ?= config-production.json
