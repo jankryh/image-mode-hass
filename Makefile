@@ -114,75 +114,145 @@ pull-deps: ## Pull required base images
 	podman pull quay.io/centos-bootc/bootc-image-builder:latest
 
 # High-performance qcow2 image creation (now standard)
-qcow2: build pull-deps ## Build high-performance qcow2 with compression and tuning
+qcow2: build pull-deps ## Build high-performance qcow2 with compression and tuning (requires rootful podman)
 	@echo "💾 Building qcow2 image..."
+	@echo "⚠️  Note: bootc-image-builder requires rootful podman daemon"
 	@mkdir -p $(OUTPUT_DIR)
-	time sudo podman run \
-		--rm --privileged --pull=newer \
-		$(RUN_FLAGS) \
-		--memory=8g --cpus=$(shell nproc) \
-		-v /var/lib/containers/storage:/var/lib/containers/storage \
-		-v ./$(CONFIG_FILE):/config.toml:ro \
-		-v $(OUTPUT_DIR):/output \
-		quay.io/centos-bootc/bootc-image-builder:latest \
-		--type qcow2 \
-		--rootfs $(ROOTFS_TYPE) \
-		--config /config.toml \
-		--compress \
-		$(FULL_IMAGE_NAME)
+	@if podman info --format='{{.Host.Security.Rootless}}' 2>/dev/null | grep -q true; then \
+		echo "⚠️  Detected rootless podman - switching to system podman"; \
+		sudo systemctl start podman.socket || true; \
+		time sudo CONTAINER_HOST='unix:///run/podman/podman.sock' podman run \
+			--rm --privileged --pull=newer \
+			$(RUN_FLAGS) \
+			--memory=8g --cpus=$(shell nproc) \
+			-v /var/lib/containers/storage:/var/lib/containers/storage \
+			-v ./$(CONFIG_FILE):/config.toml:ro \
+			-v $(OUTPUT_DIR):/output \
+			quay.io/centos-bootc/bootc-image-builder:latest \
+			--type qcow2 \
+			--rootfs $(ROOTFS_TYPE) \
+			--config /config.toml \
+			--compress \
+			$(FULL_IMAGE_NAME); \
+	else \
+		time sudo podman run \
+			--rm --privileged --pull=newer \
+			$(RUN_FLAGS) \
+			--memory=8g --cpus=$(shell nproc) \
+			-v /var/lib/containers/storage:/var/lib/containers/storage \
+			-v ./$(CONFIG_FILE):/config.toml:ro \
+			-v $(OUTPUT_DIR):/output \
+			quay.io/centos-bootc/bootc-image-builder:latest \
+			--type qcow2 \
+			--rootfs $(ROOTFS_TYPE) \
+			--config /config.toml \
+			--compress \
+			$(FULL_IMAGE_NAME); \
+	fi
 	@echo "✅ qcow2 image created in $(OUTPUT_DIR)/"
 
 # Basic qcow2 without performance optimizations (legacy)
-qcow2-basic: build pull-deps ## Basic qcow2 build without optimizations
+qcow2-basic: build pull-deps ## Basic qcow2 build without optimizations (requires rootful podman)
 	@echo "Building basic qcow2 image..."
+	@echo "⚠️  Note: bootc-image-builder requires rootful podman daemon"
 	@mkdir -p $(OUTPUT_DIR)
 	@echo "Using configuration file: $(CONFIG_FILE)"
-	sudo podman run \
-		--rm -it --privileged --pull=newer \
-		--security-opt label=type:unconfined_t \
-		-v /var/lib/containers/storage:/var/lib/containers/storage \
-		-v ./$(CONFIG_FILE):/config.toml:ro \
-		-v $(OUTPUT_DIR):/output \
-		quay.io/centos-bootc/bootc-image-builder:latest \
-		--type qcow2 \
-		--rootfs $(ROOTFS_TYPE) \
-		--config /config.toml \
-		$(FULL_IMAGE_NAME)
-	@echo "Basic qcow2 image created in $(OUTPUT_DIR)/"
+	@if podman info --format='{{.Host.Security.Rootless}}' 2>/dev/null | grep -q true; then \
+		echo "⚠️  Detected rootless podman - switching to system podman"; \
+		sudo systemctl start podman.socket || true; \
+		sudo CONTAINER_HOST='unix:///run/podman/podman.sock' podman run \
+			--rm -it --privileged --pull=newer \
+			--security-opt label=type:unconfined_t \
+			-v /var/lib/containers/storage:/var/lib/containers/storage \
+			-v ./$(CONFIG_FILE):/config.toml:ro \
+			-v $(OUTPUT_DIR):/output \
+			quay.io/centos-bootc/bootc-image-builder:latest \
+			--type qcow2 \
+			--rootfs $(ROOTFS_TYPE) \
+			--config /config.toml \
+			$(FULL_IMAGE_NAME); \
+	else \
+		sudo podman run \
+			--rm -it --privileged --pull=newer \
+			--security-opt label=type:unconfined_t \
+			-v /var/lib/containers/storage:/var/lib/containers/storage \
+			-v ./$(CONFIG_FILE):/config.toml:ro \
+			-v $(OUTPUT_DIR):/output \
+			quay.io/centos-bootc/bootc-image-builder:latest \
+			--type qcow2 \
+			--rootfs $(ROOTFS_TYPE) \
+			--config /config.toml \
+			$(FULL_IMAGE_NAME); \
+	fi
+	@echo "✅ Basic qcow2 image created in $(OUTPUT_DIR)/"
 
-iso: build pull-deps ## Build ISO installer
+iso: build pull-deps ## Build ISO installer (requires rootful podman)
 	@echo "Building ISO installer..."
+	@echo "⚠️  Note: bootc-image-builder requires rootful podman daemon"
 	@mkdir -p $(OUTPUT_DIR)
 	@echo "Using configuration file: $(CONFIG_FILE)"
-	sudo podman run \
-		--rm -it --privileged --pull=newer \
-		--security-opt label=type:unconfined_t \
-		-v /var/lib/containers/storage:/var/lib/containers/storage \
-		-v ./$(CONFIG_FILE):/config.toml:ro \
-		-v $(OUTPUT_DIR):/output \
-		quay.io/centos-bootc/bootc-image-builder:latest \
-		--type iso \
-		--rootfs $(ROOTFS_TYPE) \
-		--config /config.toml \
-		$(FULL_IMAGE_NAME)
-	@echo "ISO installer created in $(OUTPUT_DIR)/"
+	@if podman info --format='{{.Host.Security.Rootless}}' 2>/dev/null | grep -q true; then \
+		echo "⚠️  Detected rootless podman - switching to system podman"; \
+		sudo systemctl start podman.socket || true; \
+		sudo CONTAINER_HOST='unix:///run/podman/podman.sock' podman run \
+			--rm -it --privileged --pull=newer \
+			--security-opt label=type:unconfined_t \
+			-v /var/lib/containers/storage:/var/lib/containers/storage \
+			-v ./$(CONFIG_FILE):/config.toml:ro \
+			-v $(OUTPUT_DIR):/output \
+			quay.io/centos-bootc/bootc-image-builder:latest \
+			--type iso \
+			--rootfs $(ROOTFS_TYPE) \
+			--config /config.toml \
+			$(FULL_IMAGE_NAME); \
+	else \
+		sudo podman run \
+			--rm -it --privileged --pull=newer \
+			--security-opt label=type:unconfined_t \
+			-v /var/lib/containers/storage:/var/lib/containers/storage \
+			-v ./$(CONFIG_FILE):/config.toml:ro \
+			-v $(OUTPUT_DIR):/output \
+			quay.io/centos-bootc/bootc-image-builder:latest \
+			--type iso \
+			--rootfs $(ROOTFS_TYPE) \
+			--config /config.toml \
+			$(FULL_IMAGE_NAME); \
+	fi
+	@echo "✅ ISO installer created in $(OUTPUT_DIR)/"
 
-raw: build pull-deps ## Build raw disk image
+raw: build pull-deps ## Build raw disk image (requires rootful podman)
 	@echo "Building raw disk image..."
+	@echo "⚠️  Note: bootc-image-builder requires rootful podman daemon"
 	@mkdir -p $(OUTPUT_DIR)
 	@echo "Using configuration file: $(CONFIG_FILE)"
-	sudo podman run \
-		--rm -it --privileged --pull=newer \
-		--security-opt label=type:unconfined_t \
-		-v /var/lib/containers/storage:/var/lib/containers/storage \
-		-v ./$(CONFIG_FILE):/config.toml:ro \
-		-v $(OUTPUT_DIR):/output \
-		quay.io/centos-bootc/bootc-image-builder:latest \
-		--type raw \
-		--rootfs $(ROOTFS_TYPE) \
-		--config /config.toml \
-		$(FULL_IMAGE_NAME)
-	@echo "Raw disk image created in $(OUTPUT_DIR)/"
+	@if podman info --format='{{.Host.Security.Rootless}}' 2>/dev/null | grep -q true; then \
+		echo "⚠️  Detected rootless podman - switching to system podman"; \
+		sudo systemctl start podman.socket || true; \
+		sudo CONTAINER_HOST='unix:///run/podman/podman.sock' podman run \
+			--rm -it --privileged --pull=newer \
+			--security-opt label=type:unconfined_t \
+			-v /var/lib/containers/storage:/var/lib/containers/storage \
+			-v ./$(CONFIG_FILE):/config.toml:ro \
+			-v $(OUTPUT_DIR):/output \
+			quay.io/centos-bootc/bootc-image-builder:latest \
+			--type raw \
+			--rootfs $(ROOTFS_TYPE) \
+			--config /config.toml \
+			$(FULL_IMAGE_NAME); \
+	else \
+		sudo podman run \
+			--rm -it --privileged --pull=newer \
+			--security-opt label=type:unconfined_t \
+			-v /var/lib/containers/storage:/var/lib/containers/storage \
+			-v ./$(CONFIG_FILE):/config.toml:ro \
+			-v $(OUTPUT_DIR):/output \
+			quay.io/centos-bootc/bootc-image-builder:latest \
+			--type raw \
+			--rootfs $(ROOTFS_TYPE) \
+			--config /config.toml \
+			$(FULL_IMAGE_NAME); \
+	fi
+	@echo "✅ Raw disk image created in $(OUTPUT_DIR)/"
 
 # High-performance VM deployment (now standard)
 deploy-vm: qcow2 ## Deploy high-performance VM with optimized settings
