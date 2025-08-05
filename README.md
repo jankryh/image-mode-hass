@@ -197,6 +197,110 @@ sudo make push
 
 ## 🏗️ Build Architecture & Dependency Management
 
+### 🎯 System Architecture Overview
+
+The following diagram shows how the entire system works - from build process through deployment to runtime:
+
+```mermaid
+graph TB
+    subgraph "🔨 Build Process"
+        A["📦 Containerfile"] --> B["🎭 Multi-Stage Build"]
+        
+        subgraph "Stage 1: Dependency Discovery"
+            B --> C["🤖 Ansible linux-system-roles"]
+            C --> D["📋 Auto-detect Podman deps"]
+            D --> E["📝 Generate bindep.txt"]
+        end
+        
+        subgraph "Stage 2: Production Image"
+            E --> F["🔧 Install packages"]
+            F --> G["🛡️ Security hardening"]
+            G --> H["📜 Copy systemd services"]
+            H --> I["🏗️ bootc Image Ready"]
+        end
+    end
+    
+    subgraph "🚀 Deployment Options"
+        I --> J["💿 ISO Image"]
+        I --> K["💾 QCOW2 VM"]
+        I --> L["🖥️ Raw Disk"]
+        I --> M["📤 Container Registry"]
+        
+        J --> N["🔧 Hardware Installation"]
+        K --> O["☁️ VM Deployment"]
+        L --> P["🖥️ Bare Metal"]
+        M --> Q["🌐 Remote Pull & Deploy"]
+    end
+    
+    subgraph "🏃 Runtime Architecture"
+        subgraph "🖥️ Immutable OS - bootc"
+            R["🐧 Fedora 42 Base"]
+            R --> S["📦 Pre-installed Packages"]
+            S --> T["🔐 Security Tools"]
+            T --> U["🛠️ Management Scripts"]
+        end
+        
+        subgraph "🐳 Container Layer"
+            V["🏠 Home Assistant Container"]
+            W["📊 System Monitoring"]
+            X["🔄 Auto-update Services"]
+        end
+        
+        subgraph "⚙️ systemd Services"
+            Y["home-assistant.service"]
+            Z["hass-backup.timer"]
+            AA["hass-auto-update.timer"]
+            BB["zerotier-one.service"]
+            CC["fail2ban.service"]
+        end
+        
+        U --> Y
+        Y --> V
+        Z --> DD["backup-hass.sh"]
+        AA --> EE["update-system.sh"]
+    end
+    
+    subgraph "🌐 Network & Access"
+        FF["🔥 Firewall: Port 8123"]
+        GG["🔗 ZeroTier VPN"]
+        HH["🔑 SSH Access"]
+        II["📡 Home Assistant Web UI"]
+        
+        V --> FF
+        BB --> GG
+        HH --> R
+        FF --> II
+    end
+    
+    subgraph "💾 Persistent Storage"
+        JJ["📁 HA Config Directory"]
+        KK["💾 Backup Directory"]
+        LL["📝 Log Directory"]
+        
+        V --> JJ
+        DD --> KK
+        V --> LL
+    end
+    
+    subgraph "🔄 Updates & Maintenance"
+        MM["bootc upgrade"]
+        NN["Container updates"]
+        OO["Automated backups"]
+        PP["Health monitoring"]
+        
+        MM --> R
+        NN --> V
+        Z --> OO
+        EE --> PP
+    end
+    
+    style A fill:#e1f5fe
+    style I fill:#c8e6c9
+    style V fill:#fff3e0
+    style R fill:#f3e5f5
+    style FF fill:#ffebee
+```
+
 ### 🎭 Multi-Stage Build with Ansible Integration
 
 This project uses an innovative **multi-stage build approach** with Ansible for automatic dependency resolution:

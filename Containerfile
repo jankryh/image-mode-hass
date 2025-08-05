@@ -38,7 +38,8 @@ RUN dnf -y install \
     && dnf clean all
 
 # SECURITY: Force install latest secure versions of specific packages
-RUN dnf -y upgrade python3-urllib3 || pip3 install --upgrade urllib3==2.5.0 || true
+# Upgrade urllib3 to fix vulnerability (dnf may not have latest version)
+RUN pip3 install --upgrade --force-reinstall urllib3==2.5.0
 
 # SECURITY: Completely remove toolbox and all Go dependencies
 RUN dnf -y remove toolbox golang golang-bin container-tools \
