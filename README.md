@@ -18,11 +18,11 @@ cd home-assistant-bootc
 cp config-example.toml config.toml
 # Edit config.toml with your SSH key and preferences
 
-# Build the image (now with optimizations!)
+# Build the image (now optimized by default!)
 sudo make build
 
-# For maximum performance (recommended)
-sudo make build-optimized
+# For basic build without optimizations
+sudo make build-basic
 
 # Optional: Publish to registry
 sudo podman login quay.io
@@ -1003,14 +1003,13 @@ sudo podman logs home-assistant
 
 ### Build & Publish Workflow
 ```bash
-# 🚀 NEW: Optimized build workflow (recommended)
-sudo make build-optimized          # High-performance build
-sudo make build-parallel           # Maximum parallelization
-sudo make qcow2-optimized          # Optimized VM deployment
-sudo make deploy-vm-optimized      # Performance-tuned deployment
+# 🚀 High-performance build workflow (now default!)
+sudo make build                    # High-performance build with optimizations
+sudo make build-parallel           # Maximum parallelization  
+sudo make qcow2                    # Optimized VM deployment with compression
+sudo make deploy-vm                # Performance-tuned deployment
 
-# Traditional workflow (still supported)
-sudo make build                    # Build container image
+# Build and publish workflow
 sudo podman login quay.io         # Authenticate with registry
 sudo make push                     # Push to registry
 
@@ -1020,9 +1019,9 @@ sudo make iso                      # For hardware installation
 sudo make raw                      # For cloud deployment
 ```
 
-### 🆕 Advanced Management
+### 🆕 Advanced Management (Built-in Optimizations)
 ```bash
-# Performance and monitoring
+# Performance and monitoring (optimizations now default!)
 ./scripts/performance-test.sh --all        # Comprehensive performance testing
 make benchmark                             # Build performance benchmarking
 
@@ -1035,6 +1034,11 @@ sudo ./scripts/secrets-manager.sh init                    # Initialize secrets
 sudo ./scripts/secrets-manager.sh setup-env production    # Environment setup
 sudo ./scripts/secrets-manager.sh store API_KEY "secret"  # Store secrets
 sudo ./scripts/secrets-manager.sh backup                  # Backup secrets vault
+
+# Legacy basic commands (without optimizations)
+make build-basic                           # Basic build without performance features
+make qcow2-basic                           # Basic qcow2 without compression
+make deploy-vm-basic                       # Basic VM without performance tuning
 ```
 
 ### Configuration Files
