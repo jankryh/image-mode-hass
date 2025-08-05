@@ -1,0 +1,13 @@
+[Unit]
+Description=Home Assistant Weekly Auto Update Timer
+Documentation=man:systemd.timer(5)
+Requires=hass-auto-update.service
+
+[Timer]
+# Run weekly on Sunday at 3:00 AM
+OnCalendar=Sun *-*-* 03:00:00
+Persistent=true
+RandomizedDelaySec=3600
+
+[Install]
+WantedBy=timers.target

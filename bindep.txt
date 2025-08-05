@@ -1,6 +1,43 @@
+# Essential packages
 vim-enhanced
+git
+curl
+wget
+nano
+
+# Wireless support
 iwlwifi-dvm-firmware
 iwlwifi-mvm-firmware
 wpa_supplicant
+
+# Network and VPN
 zerotier-one
+openssh-server
+
+# Power management
 nut
+
+# System monitoring and utilities
+htop
+tree
+rsync
+tmux
+jq
+python3-pip
+
+# Security
+fail2ban
+
+# Time synchronization
+chrony
+
+# System tools
+bind-utils
+tcpdump
+strace
+lsof
+
+# Development tools (optional)
+# gcc
+# make
+# python3-devel

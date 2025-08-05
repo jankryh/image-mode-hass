@@ -1,0 +1,28 @@
+[Unit]
+Description=Home Assistant Automatic Update Service
+Documentation=man:systemd.service(5)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/hass-scripts/update-system.sh --auto --no-reboot
+User=root
+Group=root
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hass-auto-update
+
+# Security settings
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+
+# Timeout settings
+TimeoutStartSec=3600
+
+# Environment
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin

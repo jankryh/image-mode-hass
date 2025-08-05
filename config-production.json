@@ -1,0 +1,66 @@
+{
+  "blueprint": {
+    "customizations": {
+      "user": [
+        {
+          "name": "hass-admin",
+          "password": "$6$CHANGE_THIS_SALT$CHANGE_THIS_HASH",
+          "key": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQ... your-public-key-here",
+          "groups": [
+            "wheel",
+            "systemd-journal"
+          ],
+          "home": "/home/hass-admin"
+        }
+      ],
+      "filesystem": [
+        {
+          "mountpoint": "/",
+          "minsize": "20 GiB"
+        },
+        {
+          "mountpoint": "/var",
+          "minsize": "30 GiB"
+        },
+        {
+          "mountpoint": "/var/home-assistant",
+          "minsize": "50 GiB"
+        },
+        {
+          "mountpoint": "/var/log",
+          "minsize": "10 GiB"
+        }
+      ],
+      "hostname": "home-assistant-server",
+      "timezone": "Europe/Prague",
+      "locale": "en_US.UTF-8",
+      "kernel": {
+        "append": "quiet splash"
+      },
+      "firewall": {
+        "ports": [
+          "22:tcp",
+          "8123:tcp"
+        ],
+        "services": [
+          "ssh"
+        ]
+      },
+      "services": {
+        "enabled": [
+          "sshd",
+          "chronyd",
+          "fail2ban",
+          "firewalld",
+          "home-assistant",
+          "zerotier-one",
+          "hass-backup.timer"
+        ],
+        "disabled": [
+          "bluetooth",
+          "cups"
+        ]
+      }
+    }
+  }
+}

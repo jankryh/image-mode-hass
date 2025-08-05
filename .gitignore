@@ -1,5 +1,118 @@
-config.json
+# Build artifacts
+output/
+*.qcow2
+*.iso
+*.raw
+qcow2/
+iso/
+raw/
+
+# Container images and build cache
+.buildx-cache/
+*.tar
+*.tar.gz
+
+# Configuration files with sensitive data
 config.toml
-manifest-*.json
-qcow2/*
-bootiso/*
+config.json
+!config-example.json
+!config-production.json
+
+# Logs
+*.log
+logs/
+
+# Backup files
+backups/
+*.backup
+*.bak
+
+# SSH keys and certificates
+*.pem
+*.key
+*.crt
+*.pub
+id_*
+*.ppk
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+*.tmp
+*.temp
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vim/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Local development
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Documentation build
+docs/_build/
+
+# Package files
+*.rpm
+*.deb
+*.pkg.tar.xz
+
+# Container runtime
+/var/lib/containers/
+/var/log/containers/
+
+# systemd journal
+*.journal
+
+# Test files
+test-results/
+coverage/
+
+# Local customizations
+local/
+custom/
+override/

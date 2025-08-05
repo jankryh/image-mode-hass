@@ -1,0 +1,13 @@
+[Unit]
+Description=Home Assistant Daily Backup Timer
+Documentation=man:systemd.timer(5)
+Requires=hass-backup.service
+
+[Timer]
+# Run daily at 2:00 AM
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=1800
+
+[Install]
+WantedBy=timers.target

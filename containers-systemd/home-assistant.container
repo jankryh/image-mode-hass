@@ -1,21 +1,45 @@
 [Unit]
 Description=Home Assistant Container
+Documentation=https://www.home-assistant.io/docs/
 Wants=network-online.target
 After=network-online.target
+Requires=home-assistant.image
 
 [Service]
 Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=120
+
+# Health check
+ExecStartPost=/bin/bash -c 'for i in {1..30}; do if curl -f http://localhost:8123 >/dev/null 2>&1; then exit 0; fi; sleep 10; done; exit 1'
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=home-assistant
 
 [Container]
 Image=home-assistant.image
 AddDevice=/dev/ttyACM0
+AddDevice=/dev/ttyUSB0
 ContainerName=home-assistant
-PodmanArgs=--privileged
+PodmanArgs=--privileged --log-driver=journald --log-opt=tag="home-assistant"
 Network=host
 Environment=TZ=Europe/Prague
+Environment=HASS_LOG_LEVEL=info
 Volume=/var/home-assistant/config:/config:Z
 Volume=/run/dbus:/run/dbus:ro
+Volume=/var/log/home-assistant:/var/log:Z
 Pull=missing
 
+# Security context
+User=root
+Group=root
+
+# Resource limits
+MemoryLimit=2G
+CPUQuota=200%
+
 [Install]
-WantedBy=multi-user.target
+WantedBy=multi-user.target default.target

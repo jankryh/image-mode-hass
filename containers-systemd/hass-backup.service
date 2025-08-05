@@ -1,0 +1,23 @@
+[Unit]
+Description=Home Assistant Backup Service
+Documentation=man:systemd.service(5)
+
+[Service]
+Type=oneshot
+ExecStart=/opt/hass-scripts/backup-hass.sh /var/home-assistant/backups
+User=root
+Group=root
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hass-backup
+
+# Security settings
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+
+# Timeout settings
+TimeoutStartSec=1800
