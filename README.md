@@ -5,7 +5,7 @@
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-supported-green.svg)](https://www.home-assistant.io/)
 [![Fedora](https://img.shields.io/badge/Fedora-42+-blue.svg)](https://fedoraproject.org/)
 
-Complete solution for deploying and managing a Home Assistant server using bootc (Image Mode). This project provides an immutable operating system with a pre-configured Home Assistant container, automated backups, security hardening, and comprehensive management tools.
+Complete solution for deploying and managing a Home Assistant server using bootc (Image Mode). This project provides an immutable operating system with a pre-configured Home Assistant container, **integrated management scripts**, automated backups, security hardening, and comprehensive management tools.
 
 ## 🚀 Quick Start
 
@@ -31,7 +31,12 @@ sudo make deploy-vm
 
 # Or create ISO for hardware installation
 sudo make iso
+
+# After deployment/installation, run first-time setup
+sudo /opt/hass-scripts/setup-hass.sh
 ```
+
+💡 **After installation**: Your system includes pre-installed management scripts at `/opt/hass-scripts/` for backup, restore, updates, and monitoring!
 
 ## 📋 Table of Contents
 
@@ -51,6 +56,8 @@ sudo make iso
 
 - **Immutable OS**: Uses bootc for secure and consistent updates
 - **Containerized Home Assistant**: Automatically started via systemd
+- **Integrated Management Scripts**: Pre-installed backup, restore, health-check, and update tools
+- **Automated Maintenance**: Scheduled backups and system updates via systemd timers
 - **VPN Connection**: Integrated ZeroTier for remote access
 - **UPS Support**: Network UPS Tools for UPS power management
 - **Firewall**: Pre-configured for Home Assistant (port 8123)
@@ -397,6 +404,70 @@ sudo podman run \
 
 ## 🔄 System Management and Updates
 
+### 🛠️ Integrated Management Scripts
+
+**Your ISO/qcow2 image includes pre-installed management scripts!** 
+All scripts are automatically available at `/opt/hass-scripts/` after installation.
+
+#### 🚀 First Boot Setup
+```bash
+# Run this after first boot/installation
+sudo /opt/hass-scripts/setup-hass.sh
+```
+**What it does:**
+- ✅ Configures system services
+- ✅ Sets up firewall rules  
+- ✅ Creates necessary directories
+- ✅ Starts Home Assistant
+- ✅ Adds useful command aliases
+
+#### 💾 Backup & Restore
+```bash
+# Create backup (automatic location)
+sudo /opt/hass-scripts/backup-hass.sh
+
+# Create backup to custom location
+sudo /opt/hass-scripts/backup-hass.sh /custom/backup/path
+
+# Restore from backup
+sudo /opt/hass-scripts/restore-hass.sh /path/to/backup/directory
+
+# List available backups
+ls -la /var/home-assistant/backups/
+```
+
+#### 🔍 System Health Monitoring
+```bash
+# Quick health check
+sudo /opt/hass-scripts/health-check.sh
+
+# Detailed health check
+sudo /opt/hass-scripts/health-check.sh --verbose
+```
+**Checks:** CPU, RAM, disk space, services, containers, network, bootc status
+
+#### 🔄 System Updates
+```bash
+# Safe system update with backup
+sudo /opt/hass-scripts/update-system.sh
+
+# Automatic mode (no prompts)
+sudo /opt/hass-scripts/update-system.sh --auto
+
+# Update without reboot
+sudo /opt/hass-scripts/update-system.sh --no-reboot
+```
+
+#### ⚡ Convenient Aliases (after setup-hass.sh)
+```bash
+hass-logs       # View Home Assistant logs
+hass-status     # Check Home Assistant status
+hass-restart    # Restart Home Assistant
+hass-backup     # Create backup
+hass-health     # System health check
+hass-update     # System update
+```
+
 ### Quick Management Commands
 ```bash
 # System health check
@@ -408,6 +479,36 @@ sudo /opt/hass-scripts/backup-hass.sh
 # System status
 sudo make status
 sudo bootc status
+```
+
+### 🤖 Automated Services
+
+The image includes pre-configured systemd timers for automatic maintenance:
+
+#### 📅 Automatic Backups
+```bash
+# Enable daily backups at 2:00 AM (already configured)
+sudo systemctl enable --now hass-backup.timer
+
+# Check backup timer status
+sudo systemctl status hass-backup.timer
+sudo systemctl list-timers hass-backup.timer
+
+# View backup logs
+sudo journalctl -u hass-backup.service
+```
+
+#### 🔄 Automatic Updates  
+```bash
+# Enable weekly updates (Sunday 3:00 AM)
+sudo systemctl enable --now hass-auto-update.timer
+
+# Check update timer status
+sudo systemctl status hass-auto-update.timer
+sudo systemctl list-timers hass-auto-update.timer
+
+# View update logs
+sudo journalctl -u hass-auto-update.service
 ```
 
 ### OS Updates
