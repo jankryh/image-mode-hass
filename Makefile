@@ -201,6 +201,9 @@ iso: build pull-deps ## Build ISO installer (requires rootful podman)
 		podman machine set --rootful || echo "⚠️  Failed to set rootful mode"; \
 		podman machine start || echo "⚠️  Failed to start machine"; \
 		sleep 3; \
+		echo "🔄 Ensuring image is available in rootful context..."; \
+		sudo podman pull $(FULL_IMAGE_NAME) 2>/dev/null || \
+		echo "⚠️  Image not found in registry - trying local build"; \
 		sudo podman run \
 			--rm -it --privileged --pull=newer \
 			--security-opt label=type:unconfined_t \
@@ -213,6 +216,9 @@ iso: build pull-deps ## Build ISO installer (requires rootful podman)
 			--config /config.toml \
 			$(FULL_IMAGE_NAME); \
 	else \
+		echo "🔄 Ensuring image is available for bootc-image-builder..."; \
+		sudo podman pull $(FULL_IMAGE_NAME) 2>/dev/null || \
+		echo "⚠️  Image not found in registry - using local build"; \
 		sudo podman run \
 			--rm -it --privileged --pull=newer \
 			--security-opt label=type:unconfined_t \
