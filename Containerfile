@@ -10,6 +10,9 @@ FROM quay.io/fedora/fedora-bootc:42
 # Copy repository configurations
 COPY repos/zerotier.repo /etc/yum.repos.d/zerotier.repo
 
+# Upgrade all packages to latest versions (security fix)
+RUN dnf -y upgrade --refresh
+
 # Install packages from dependency list
 RUN --mount=type=bind,from=ansible-stage,source=/deps/,target=/deps grep -v '^#' /deps/bindep.txt | grep -v '^$' | xargs dnf -y install
 
@@ -30,6 +33,12 @@ RUN dnf -y install \
     chrony \
     logrotate \
     && dnf clean all
+
+# Remove potentially problematic packages that are not needed
+RUN dnf -y remove toolbox || true
+
+# Force upgrade specific vulnerable packages
+RUN dnf -y upgrade python3-urllib3 golang || true
 
 # Configure firewall rules
 RUN firewall-offline-cmd --add-port=8123/tcp && \

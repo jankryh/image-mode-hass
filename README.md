@@ -150,9 +150,41 @@ ROOTFS_TYPE=btrfs make qcow2
 # Option A: Using Make (recommended)
 sudo make build
 
-# Option B: Direct podman build
+# Option B: Security-focused build (latest packages, no cache)
+sudo make build-security
+
+# Option C: Direct podman build
 sudo podman build -t quay.io/rh-ee-jkryhut/fedora-bootc-hass .
 ```
+
+#### 🔒 Security Builds
+
+**When to use `make build-security`:**
+- After container registry reports vulnerabilities
+- Monthly security updates
+- Before production deployments
+- When building for security-sensitive environments
+
+**Benefits:**
+- ✅ Updates all packages to latest versions
+- ✅ Removes potentially vulnerable packages (toolbox)
+- ✅ Forces fresh package downloads (no cache)
+- ✅ Targets specific vulnerable packages (urllib3, golang)
+
+**Registry Vulnerability Scanning:**
+Most registries (Quay.io, Docker Hub) automatically scan for vulnerabilities. If your registry reports issues:
+
+```bash
+# 1. Build with security updates
+sudo make build-security
+
+# 2. Push updated image
+sudo make push
+
+# 3. Verify fixes in registry web interface
+```
+
+📖 **For detailed vulnerability management, see [SECURITY_VULNERABILITIES.md](SECURITY_VULNERABILITIES.md)**
 
 ## 📤 Publishing to Registry (Optional)
 
@@ -321,13 +353,13 @@ sudo make iso
 
 # Manual approach
 sudo podman run \
-    --rm -it --privileged --pull=newer \
-    --security-opt label=type:unconfined_t \
-    -v /var/lib/containers/storage:/var/lib/containers/storage \
-    -v ./config.toml:/config.toml \
-    -v .:/output \
-    quay.io/centos-bootc/bootc-image-builder:latest \
-    --type iso \
+      --rm -it --privileged --pull=newer \
+      --security-opt label=type:unconfined_t \
+      -v /var/lib/containers/storage:/var/lib/containers/storage \
+      -v ./config.toml:/config.toml \
+      -v .:/output \
+      quay.io/centos-bootc/bootc-image-builder:latest \
+      --type iso \
     --rootfs ext4 \
     --config /config.toml \
     quay.io/rh-ee-jkryhut/fedora-bootc-hass
@@ -359,7 +391,7 @@ sudo podman run \
     quay.io/centos-bootc/bootc-image-builder:latest \
     --type raw \
     --rootfs ext4 \
-    --config /config.toml \
+      --config /config.toml \
     quay.io/rh-ee-jkryhut/fedora-bootc-hass
 ```
 
@@ -422,7 +454,8 @@ sudo reboot
 ```bash
 # Build and deployment
 make help                    # Show all available targets
-make build                   # Build container image
+make build                   # Build container image  
+make build-security          # Security build (latest packages, no cache, vulnerability fixes)
 make push                    # Push image to registry (requires login)
 make all                     # Build all formats (container, qcow2, iso)
 make qcow2                   # Create VM disk image
@@ -661,6 +694,7 @@ sudo crontab -e
 ### Project Documentation
 - **[CONFIGURATION.md](CONFIGURATION.md)** - Detailed configuration guide
 - **[SECURITY.md](SECURITY.md)** - Security hardening guide
+- **[SECURITY_VULNERABILITIES.md](SECURITY_VULNERABILITIES.md)** - Security vulnerability management guide
 - **[PROJECT_ANALYSIS.md](PROJECT_ANALYSIS.md)** - Technical project analysis
 - **[scripts/README.md](scripts/README.md)** - Management scripts documentation
 

@@ -11,7 +11,7 @@ BUILD_FLAGS = $(if $(filter true,$(USE_CACHE)),,--no-cache) $(if $(filter true,$
 RUN_FLAGS = $(if $(filter true,$(VERBOSE)),-v,) $(RUN_ARGS)
 
 # Build targets
-.PHONY: help build push clean qcow2 iso raw deploy-vm status
+.PHONY: help build build-security push clean qcow2 iso raw deploy-vm status
 .PHONY: dev-build dev-qcow2 dev-deploy all vm clean-vm
 .PHONY: config-create config-show config-template validate-config info
 .PHONY: config-template-dockerhub config-template-ghcr config-template-local
@@ -28,6 +28,12 @@ build: ## Build the bootc container image
 	@echo "Using configuration: $(CONFIG_MK)"
 	sudo $(CONTAINER_CMD) build $(BUILD_FLAGS) -t $(FULL_IMAGE_NAME) .
 	@echo "Build completed: $(FULL_IMAGE_NAME)"
+
+build-security: ## Build with security-focused options (no cache, latest packages)
+	@echo "Building $(FULL_IMAGE_NAME) with security updates..."
+	@echo "Using configuration: $(CONFIG_MK)"
+	sudo $(CONTAINER_CMD) build --no-cache --pull=always -t $(FULL_IMAGE_NAME) .
+	@echo "Security build completed: $(FULL_IMAGE_NAME)"
 
 push: build ## Build and push image to registry
 	@echo "Pushing $(FULL_IMAGE_NAME) to registry..."
