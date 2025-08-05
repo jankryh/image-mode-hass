@@ -45,7 +45,6 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     --mount=type=cache,target=/var/lib/dnf,sharing=locked \
     dnf makecache --refresh && \
     dnf -y upgrade --refresh --security --exclude=kernel* && \
-    dnf -y install-updates --security && \
     dnf clean all
 
 #==================================================
@@ -183,7 +182,7 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     dnf makecache --refresh && \
     dnf -y check-update --security || true && \
     dnf -y upgrade --refresh --security --nobest && \
-    dnf -y distro-sync --security && \
+    dnf -y distro-sync --nobest && \
     dnf clean all
 
 # SECURITY: Remove unnecessary files and reduce attack surface
