@@ -16,7 +16,9 @@ raw/
 config.toml
 config.json
 !config-example.json
+!config-example.toml
 !config-production.json
+!config-production.toml
 
 # Custom Makefile configurations
 config-*.mk

@@ -88,13 +88,18 @@ cd HASS_image_mode/image-mode-hass
 ### 2. Configuration
 Copy and modify the configuration file:
 ```bash
+# Option A: TOML format (recommended)
+cp config-example.toml config.toml
+
+# Option B: JSON format (legacy)
 cp config-example.json config.toml
 ```
 
 **Important config.toml modifications:**
-- Change the `ansible` user password
+- Change the `ansible` user password (or `hass-admin` for production)
 - Add your SSH public key
 - Adjust filesystem sizes as needed
+- Set timezone and locale preferences
 
 ### 3. Build Configuration (Optional)
 Use the flexible Makefile configuration system:

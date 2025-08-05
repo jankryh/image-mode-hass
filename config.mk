@@ -25,7 +25,7 @@ IMAGE_TAG ?= latest
 #==========================================
 
 # Configuration file for bootc image builder
-CONFIG_FILE ?= config-production.json
+CONFIG_FILE ?= config-production.toml
 
 # Output directory for generated images
 OUTPUT_DIR ?= ./output
@@ -66,7 +66,7 @@ VM_OS_VARIANT ?= rhel9.0
 DEV_TAG ?= dev
 
 # Development config file
-DEV_CONFIG ?= config-example.json
+DEV_CONFIG ?= config-example.toml
 
 # Development VM name
 DEV_VM_NAME ?= hass-dev

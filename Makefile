@@ -42,6 +42,7 @@ pull-deps: ## Pull required base images
 qcow2: build pull-deps ## Build qcow2 VM image
 	@echo "Building qcow2 image..."
 	@mkdir -p $(OUTPUT_DIR)
+	@echo "Using configuration file: $(CONFIG_FILE)"
 	sudo podman run \
 		--rm -it --privileged --pull=newer \
 		--security-opt label=type:unconfined_t \
@@ -57,6 +58,7 @@ qcow2: build pull-deps ## Build qcow2 VM image
 iso: build pull-deps ## Build ISO installer
 	@echo "Building ISO installer..."
 	@mkdir -p $(OUTPUT_DIR)
+	@echo "Using configuration file: $(CONFIG_FILE)"
 	sudo podman run \
 		--rm -it --privileged --pull=newer \
 		--security-opt label=type:unconfined_t \
@@ -72,6 +74,7 @@ iso: build pull-deps ## Build ISO installer
 raw: build pull-deps ## Build raw disk image
 	@echo "Building raw disk image..."
 	@mkdir -p $(OUTPUT_DIR)
+	@echo "Using configuration file: $(CONFIG_FILE)"
 	sudo podman run \
 		--rm -it --privileged --pull=newer \
 		--security-opt label=type:unconfined_t \
