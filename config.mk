@@ -1,6 +1,5 @@
 # Home Assistant bootc Configuration
 # Copy this file and customize for your environment
-# Usage: make build (uses defaults) or CONFIG_FILE=my-config.mk make build
 
 #==========================================
 # Container Image Configuration
@@ -9,16 +8,11 @@
 # Container image name (without registry/tag)
 IMAGE_NAME ?= fedora-bootc-hass
 
-# Container registry (quay.io, docker.io, your-registry.com)
+# Container registry
 REGISTRY ?= quay.io/rh-ee-jkryhut
 
 # Image tag/version
 IMAGE_TAG ?= latest
-
-# Alternative registries examples:
-# REGISTRY = docker.io/myusername
-# REGISTRY = localhost:5000
-# REGISTRY = ghcr.io/myuser
 
 #==========================================
 # Build Configuration
@@ -54,11 +48,9 @@ ifeq ($(ROOTLESS_MODE),auto)
 endif
 
 # Root filesystem type for disk images
-# Options: ext4 (default, stable), xfs (RHEL/CentOS default), btrfs (modern, snapshots)
 ROOTFS_TYPE ?= ext4
 
 # Target architecture for builds
-# Options: auto (detect), arm64 (Apple Silicon/ARM64), amd64 (Intel x86_64)
 TARGET_ARCH ?= auto
 
 # Auto-detect architecture if not specified
@@ -109,90 +101,23 @@ VM_GRAPHICS ?= spice
 VM_OS_VARIANT ?= rhel9.0
 
 #==========================================
-# Development Configuration
-#==========================================
-
-# Development image tag
-DEV_TAG ?= dev
-
-# Development config file
-DEV_CONFIG ?= config-example.toml
-
-# Development VM name
-DEV_VM_NAME ?= hass-dev
-
-# Enable debug output
-DEBUG ?= false
-
-#==========================================
-# Deployment Configuration
-#==========================================
-
-# SSH user for remote deployment
-SSH_USER ?= root
-
-# SSH host for remote deployment
-SSH_HOST ?= 
-
-# SSH key file for authentication
-SSH_KEY ?= ~/.ssh/id_rsa
-
-# Remote deployment directory
-REMOTE_DIR ?= /tmp/hass-deployment
-
-#==========================================
 # Build Options
 #==========================================
-
-# Enable parallel builds
-PARALLEL_BUILD ?= true
-
-# Build arguments for customization
-BUILD_ARGS += --build-arg TIMEZONE=$(TIMEZONE)
-
-# Build cache directory
-BUILD_CACHE ?= ./.buildcache
 
 # Enable build cache
 USE_CACHE ?= true
 
-# Force rebuild (ignore cache)
-FORCE_REBUILD ?= false
-
 # Enable verbose output
 VERBOSE ?= false
 
-#==========================================
-# Testing Configuration
-#==========================================
-
-# Enable health checks after deployment
-ENABLE_HEALTH_CHECK ?= true
-
-# Health check timeout in seconds
-HEALTH_CHECK_TIMEOUT ?= 300
-
-# Test configuration file
-TEST_CONFIG ?= config-test.toml
-
-#==========================================
-# Advanced Options
-#==========================================
-
-# Custom build arguments
-BUILD_ARGS ?=
+# Build arguments for customization
+BUILD_ARGS += --build-arg TIMEZONE=$(TIMEZONE)
 
 # Additional podman/docker run arguments
 RUN_ARGS ?=
 
-# Custom systemd service enable list
-ENABLE_SERVICES ?= sshd chronyd fail2ban firewalld
-
 # Timezone for container
 TIMEZONE ?= Europe/Prague
-
-# Locale setting
-LOCALE ?= en_US.UTF-8
 
 #==========================================
 # Override Examples
@@ -213,9 +138,3 @@ LOCALE ?= en_US.UTF-8
 # CONFIG_FILE = config-production.toml
 # VM_MEMORY = 8192
 # VM_VCPUS = 4
-
-# For development:
-# CONFIG_FILE = config-example.toml
-# IMAGE_TAG = dev
-# DEBUG = true
-# VERBOSE = true

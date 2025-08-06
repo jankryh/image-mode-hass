@@ -1,70 +1,40 @@
-# 🚀 Home Assistant bootc - Optimization Guide
+# Home Assistant bootc - Optimization Guide
 
-This comprehensive guide covers the advanced optimization features implemented to enhance performance, dependency management, and secrets handling.
+This guide covers optimization features for performance, dependency management, and build efficiency.
 
-## 📋 Table of Contents
+## Performance Optimizations
 
-- [Performance Optimizations](#-performance-optimizations)
-- [Dependency Management](#-dependency-management)
-- [Secrets Management](#-secrets-management)
-- [Usage Examples](#-usage-examples)
-- [Best Practices](#-best-practices)
-- [Troubleshooting](#-troubleshooting)
+### Build Performance
 
-## 🚀 Performance Optimizations
-
-### Enhanced Build Performance
-
-#### **Optimized Containerfile**
+#### Optimized Containerfile
 The main `Containerfile` includes:
-
-- **Multi-stage builds** with aggressive caching
-- **Layer optimization** and proper ordering
-- **Parallel processing** capabilities
-- **Build cache management**
-- **Resource optimization**
+- Multi-stage builds with caching
+- Layer optimization and proper ordering
+- Parallel processing capabilities
+- Build cache management
+- Resource optimization
 
 ```bash
-# Use high-performance build process (now default)
+# Use optimized build process
 make build
 
 # Parallel build with maximum performance
 make build-parallel
-
-# Security build with optimizations
-make build-security
 ```
 
-#### **Advanced Makefile Features**
-
-```bash
-# Performance-focused targets
-make build                    # High-performance build (with optimizations)
-make qcow2                    # Optimized VM images with compression
-make deploy-vm                # Performance-tuned deployment
-make benchmark                # Performance benchmarking
-make performance-test         # Comprehensive testing
-
-# Cache management
-make cache-pull               # Download build cache
-make cache-push               # Upload build cache
-make cache-clean              # Clean local cache
-```
-
-#### **Build Performance Features**
+#### Build Performance Features
 
 | Feature | Description | Benefits |
 |---------|-------------|----------|
-| **Multi-stage caching** | Separate dependency resolution stage | 50-70% faster rebuilds |
-| **Layer optimization** | Strategic layer ordering | Reduced image size |
-| **Parallel processing** | Utilize all CPU cores | 2-4x faster builds |
-| **Resource limits** | Memory and CPU constraints | Predictable performance |
-| **Build cache** | Registry-based cache storage | Consistent build speed |
+| Multi-stage caching | Separate dependency resolution stage | 50-70% faster rebuilds |
+| Layer optimization | Strategic layer ordering | Reduced image size |
+| Parallel processing | Utilize all CPU cores | 2-4x faster builds |
+| Resource limits | Memory and CPU constraints | Predictable performance |
+| Build cache | Registry-based cache storage | Consistent build speed |
 
-### Performance Testing Suite
+### Performance Testing
 
-#### **Comprehensive Benchmarking**
-
+#### Benchmarking
 ```bash
 # Run all performance tests
 ./scripts/performance-test.sh --all
@@ -78,10 +48,8 @@ make cache-clean              # Clean local cache
 ./scripts/performance-test.sh --all --verbose
 ```
 
-#### **Performance Metrics**
-
+#### Performance Metrics
 The testing suite measures:
-
 - **Boot performance** - System startup time analysis
 - **CPU performance** - Computation benchmarks  
 - **Memory performance** - RAM usage and speed tests
@@ -89,320 +57,224 @@ The testing suite measures:
 - **Network performance** - Connectivity and latency tests
 - **Container performance** - Startup and runtime tests
 
-#### **Automated Reporting**
+## Dependency Management
 
-Generated HTML reports include:
+### Automated Dependency Resolution
 
-- Visual performance metrics
-- Threshold compliance checking
-- Historical trend analysis
-- Optimization recommendations
-- Detailed system information
+#### Ansible Integration
+The system uses Ansible for automatic dependency discovery:
 
-## 📦 Dependency Management
+```dockerfile
+# Stage 1: Dependency Discovery
+FROM quay.io/fedora/fedora-bootc:42 as ansible-stage
+RUN dnf -y install linux-system-roles
+RUN /usr/share/ansible/collections/ansible_collections/fedora/linux_system_roles/roles/podman/.ostree/get_ostree_data.sh packages runtime fedora-42 raw >> /deps/bindep.txt
 
-### Advanced Dependency System
+# Stage 2: Production Image  
+FROM quay.io/fedora/fedora-bootc:42
+RUN --mount=type=bind,from=ansible-stage,source=/deps/,target=/deps \
+    grep -v '^#' /deps/bindep.txt | xargs dnf -y install
+```
 
-#### **Automated Dependency Management**
+#### Dependency Sources
 
+1. **Manual dependencies** (`bindep.txt`):
+   ```bash
+   # Home Assistant specific packages
+   zerotier-one, openssh-server, nut
+   htop, tree, rsync, tmux, jq
+   fail2ban, chrony, vim-enhanced
+   ```
+
+2. **Auto-discovered dependencies** (via Ansible):
+   ```bash
+   # Podman runtime requirements for bootc
+   containernetworking-plugins, containers-common
+   container-selinux, fuse-overlayfs, slirp4netns
+   ```
+
+### Benefits
+
+| Traditional Approach | Ansible Approach |
+|---------------------|------------------|
+| Manual dependency tracking | Automated dependency resolution |
+| Version conflicts possible | Community-tested combinations |
+| Outdated package lists | Always current for Fedora version |
+| Bloated with unnecessary packages | Minimal, optimized package set |
+| Breaks with Fedora updates | Adapts to new Fedora releases |
+
+## Cache Management
+
+### Build Cache Strategies
+
+#### Local Cache
 ```bash
-# Initialize dependency management
-./scripts/deps-update.sh
+# Enable build cache (default)
+USE_CACHE=true make build
 
-# Check for updates
-./scripts/deps-update.sh --dry-run
+# Disable cache for clean builds
+USE_CACHE=false make build
 
-# Update dependencies with backup
-./scripts/deps-update.sh --verbose
-
-# Generate dependency report
-./scripts/deps-update.sh --report-only
+# Clean local cache
+make cache-clean
 ```
 
-#### **Dependency Health Checking**
-
+#### Registry Cache
 ```bash
-# Comprehensive health check
-./scripts/deps-check.sh
+# Pull latest image for layer caching
+make cache-pull
 
-# Security-focused check
-./scripts/deps-check.sh --security-only
-
-# Verbose analysis
-./scripts/deps-check.sh --verbose
+# Push built image to registry (creates cache for others)
+make cache-push
 ```
 
-#### **Version Management Features**
-
-| Component | Management Features |
-|-----------|-------------------|
-| **Base Images** | Automated version tracking, update notifications |
-| **System Packages** | Security vulnerability monitoring, compatibility checking |
-| **Python Packages** | Version pinning, security patch tracking |
-| **Container Images** | Digest tracking, rollback capabilities |
-
-#### **Compatibility Matrix**
-
-The system maintains a compatibility matrix ensuring:
-
-- ✅ **Tested combinations** of components
-- ❌ **Known incompatibilities** prevention
-- 🔄 **Update path validation**
-- 📊 **Dependency impact analysis**
-
-### Dependency Structure
-
-```
-dependencies/
-├── versions.json           # Version tracking database
-├── compatibility.matrix    # Compatibility requirements
-├── cache/                 # Dependency cache
-├── backups/               # Automatic backups
-├── reports/               # Analysis reports
-└── locks/                 # Update locks
+### Cache Configuration
+```makefile
+# Build cache settings
+USE_CACHE = true
+BUILD_CACHE = ./.buildcache
+FORCE_REBUILD = false
 ```
 
-## 🔐 Secrets Management
+## Resource Optimization
 
-### Enterprise-Grade Secrets System
+### Build Resources
+```makefile
+# Resource limits for builds
+BUILD_MEMORY = 4g
+BUILD_CPUS = $(shell nproc)
+```
 
-#### **Initialize Secrets Management**
+### VM Optimization
+```makefile
+# Optimized VM settings
+VM_MEMORY = 4096
+VM_VCPUS = 2
+VM_CPU_MODEL = host-passthrough
+VM_DISK_CACHE = writeback
+```
 
+## Usage Examples
+
+### High-Performance Build Workflow
 ```bash
-# Setup secrets infrastructure
-sudo ./scripts/secrets-manager.sh init
+# 1. Pull cache for faster builds
+make cache-pull
 
-# Setup environment-specific secrets
-sudo ./scripts/secrets-manager.sh setup-env production
-sudo ./scripts/secrets-manager.sh setup-env staging
-sudo ./scripts/secrets-manager.sh setup-env development
-```
-
-#### **Secret Operations**
-
-```bash
-# Store secrets
-sudo ./scripts/secrets-manager.sh store DB_PASSWORD "secretpass123" production
-sudo ./scripts/secrets-manager.sh store API_KEY "abcd1234" production
-sudo ./scripts/secrets-manager.sh store ZEROTIER_ID "networkid" production
-
-# Retrieve secrets
-sudo ./scripts/secrets-manager.sh get DB_PASSWORD production
-sudo ./scripts/secrets-manager.sh get API_KEY production
-
-# List all secrets
-sudo ./scripts/secrets-manager.sh list production
-sudo ./scripts/secrets-manager.sh list  # All environments
-
-# Delete secrets
-sudo ./scripts/secrets-manager.sh delete OLD_API_KEY production
-```
-
-#### **Configuration Processing**
-
-```bash
-# Process configuration with secrets injection
-sudo ./scripts/secrets-manager.sh process-config production \
-    /opt/hass-config/environments/production/config.yaml \
-    /var/home-assistant/config/processed_config.yaml
-```
-
-#### **Backup and Restore**
-
-```bash
-# Backup secrets vault
-sudo ./scripts/secrets-manager.sh backup /var/home-assistant/backups
-
-# Restore from backup
-sudo ./scripts/secrets-manager.sh restore /var/home-assistant/backups/secrets_backup_20241201_120000.tar.gz
-```
-
-### Security Features
-
-| Feature | Description | Benefits |
-|---------|-------------|----------|
-| **AES-256 Encryption** | Military-grade encryption | Maximum security |
-| **Environment Isolation** | Separate secrets per environment | Prevent cross-contamination |
-| **Access Control** | Root-only access with proper permissions | Controlled access |
-| **Automatic Backup** | Scheduled backup capabilities | Disaster recovery |
-| **Audit Trail** | Creation and access logging | Security compliance |
-
-### Secrets Structure
-
-```
-/etc/hass-secrets/
-├── vault.encrypted        # Encrypted secrets vault
-├── .keyfile               # Encryption key (600 permissions)
-└── backups/               # Automatic backups
-
-/opt/hass-config/
-└── environments/
-    ├── development/       # Development configs
-    ├── staging/          # Staging configs
-    └── production/       # Production configs
-```
-
-## 💡 Usage Examples
-
-### Complete Optimization Workflow
-
-```bash
-# 1. Performance-optimized build
+# 2. Build with optimizations
 make build
 
-# 2. Update and check dependencies
-./scripts/deps-update.sh --verbose
-./scripts/deps-check.sh
+# 3. Create optimized VM image
+make qcow2
 
-# 3. Setup secrets for production
-sudo ./scripts/secrets-manager.sh init
-sudo ./scripts/secrets-manager.sh setup-env production
-
-# 4. Deploy with optimizations
+# 4. Deploy with performance tuning
 make deploy-vm
 
 # 5. Run performance tests
 ./scripts/performance-test.sh --all
-
-# 6. Monitor and maintain
-./scripts/deps-check.sh --security-only
-./scripts/secrets-manager.sh backup
 ```
 
-### Development Environment Setup
-
+### Development Workflow
 ```bash
-# Quick development setup
-make dev-build CONFIG_MK=config-development.mk
-./scripts/deps-update.sh --dry-run
-sudo ./scripts/secrets-manager.sh setup-env development
-make dev-deploy
+# Development build with optimizations
+make build CONFIG_MK=config-dev.mk
+
+# Quick testing
+make qcow2 CONFIG_MK=config-dev.mk
+
+# Performance validation
+./scripts/performance-test.sh --quick
 ```
 
 ### Production Deployment
-
 ```bash
-# Production-ready deployment
+# Production build with security
 make build-security
-./scripts/deps-update.sh
-./scripts/deps-check.sh
-sudo ./scripts/secrets-manager.sh setup-env production
+
+# Optimized deployment
+make qcow2 CONFIG_MK=config-production.mk
 make deploy-vm CONFIG_MK=config-production.mk
-./scripts/performance-test.sh --all
+
+# Performance verification
+./scripts/performance-test.sh --production
 ```
 
-## 🎯 Best Practices
+## Best Practices
 
 ### Build Optimization
-
-1. **Use optimized builds** for production deployments
-2. **Enable caching** for faster development iterations
-3. **Monitor build performance** with benchmarking
-4. **Clean cache regularly** to prevent bloat
+1. **Use cache**: Enable build cache for faster rebuilds
+2. **Parallel builds**: Utilize all available CPU cores
+3. **Layer optimization**: Order operations to maximize cache hits
+4. **Resource limits**: Set appropriate memory and CPU constraints
 
 ### Dependency Management
-
-1. **Regular updates** with automated checking
-2. **Backup before updates** for safe rollback
-3. **Monitor security advisories** for critical updates
-4. **Test compatibility** before production deployment
-
-### Secrets Management
-
-1. **Use environment-specific secrets** for isolation
-2. **Regular backup** of secrets vault
-3. **Rotate secrets** according to security policies
-4. **Monitor access** through audit logs
+1. **Automated discovery**: Let Ansible handle dependency resolution
+2. **Version tracking**: Monitor dependency versions for security
+3. **Minimal packages**: Only include necessary dependencies
+4. **Regular updates**: Keep dependencies current
 
 ### Performance Monitoring
+1. **Regular testing**: Run performance tests regularly
+2. **Baseline comparison**: Compare against known good performance
+3. **Resource monitoring**: Track CPU, memory, and disk usage
+4. **Optimization validation**: Verify improvements with testing
 
-1. **Baseline performance** after initial deployment
-2. **Regular benchmarking** to detect degradation
-3. **Monitor resource usage** for capacity planning
-4. **Optimize based on** performance reports
+## Troubleshooting
 
-## ⚠️ Troubleshooting
+### Common Performance Issues
 
-### Build Performance Issues
-
+#### Slow Builds
 ```bash
-# Check build cache status
+# Check cache status
 make cache-pull
-make config-show
 
-# Clean and rebuild
-make clean
-make build
+# Verify resource allocation
+make config-show | grep BUILD_
 
 # Enable verbose output
 VERBOSE=true make build
 ```
 
-### Dependency Problems
-
+#### High Resource Usage
 ```bash
-# Check dependency health
-./scripts/deps-check.sh --verbose
+# Adjust resource limits
+BUILD_MEMORY=2g BUILD_CPUS=2 make build
 
-# Reset dependencies
-./scripts/deps-update.sh --backup-only
-# Manual intervention based on backup
-
-# Security audit
-./scripts/deps-check.sh --security-only
+# Monitor system resources
+htop
+iotop
 ```
 
-### Secrets Issues
-
+#### Cache Issues
 ```bash
-# Check secrets structure
-sudo ls -la /etc/hass-secrets/
+# Clean cache
+make cache-clean
 
-# Validate vault integrity
-sudo ./scripts/secrets-manager.sh list
-
-# Restore from backup if corrupted
-sudo ./scripts/secrets-manager.sh restore /path/to/backup.tar.gz
+# Reset build environment
+make clean
+make cache-pull
 ```
 
-### Performance Issues
-
+### Performance Debugging
 ```bash
-# Run performance diagnostics
-./scripts/performance-test.sh --all --verbose
+# Enable detailed logging
+VERBOSE=true make build
+
+# Monitor build process
+watch -n 1 'ps aux | grep podman'
 
 # Check system resources
-free -h
-df -h
-top -bn1
-
-# Review performance report
-firefox $(ls -t performance_results/*.html | head -1)
+vmstat 1
 ```
 
-## 📊 Monitoring and Metrics
-
-### Key Performance Indicators
-
-| Metric | Target | Critical Threshold |
-|---------|--------|--------------------|
-| **Boot Time** | < 60s | > 120s |
-| **Memory Usage** | < 60% | > 80% |
-| **Disk I/O** | > 100 MB/s | < 50 MB/s |
-| **Build Time** | < 10 min | > 20 min |
-| **Container Startup** | < 30s | > 60s |
-
-### Automated Monitoring
-
+### Optimization Validation
 ```bash
-# Setup performance monitoring
-echo "0 6 * * * /opt/hass-scripts/performance-test.sh --all" | sudo crontab -
+# Run performance tests
+./scripts/performance-test.sh --all
 
-# Setup dependency monitoring  
-echo "0 2 * * 1 /opt/hass-scripts/deps-check.sh" | sudo crontab -
+# Compare results
+./scripts/performance-test.sh --compare baseline.json
 
-# Setup secrets backup
-echo "0 3 * * * /opt/hass-scripts/secrets-manager.sh backup" | sudo crontab -
+# Generate optimization report
+./scripts/performance-test.sh --report
 ```
-
-This optimization guide provides comprehensive coverage of all performance, dependency, and secrets management features. Regular use of these tools ensures a secure, fast, and maintainable Home Assistant bootc deployment.

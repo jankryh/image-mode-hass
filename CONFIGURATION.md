@@ -2,7 +2,7 @@
 
 This document explains how to configure the build and deployment process using the flexible configuration system.
 
-## 📋 Configuration Files
+## Configuration Files
 
 ### Default Configuration
 The default configuration is defined in `config.mk` and includes sensible defaults for most use cases.
@@ -10,7 +10,7 @@ The default configuration is defined in `config.mk` and includes sensible defaul
 ### Custom Configuration
 You can create custom configuration files to override defaults for different environments.
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Using Default Configuration
 ```bash
@@ -23,14 +23,11 @@ make config-show
 
 ### Creating Custom Configuration
 ```bash
-# Option 1: Create from template
-make config-template
-
-# Option 2: Copy and customize
+# Copy and customize
 cp config.mk my-config.mk
 # Edit my-config.mk with your settings
 
-# Option 3: Use example
+# Use example
 cp config-custom.mk.example my-config.mk
 # Edit my-config.mk
 ```
@@ -47,7 +44,7 @@ make deploy-vm CONFIG_MK=my-config.mk
 make config-show CONFIG_MK=my-config.mk
 ```
 
-## ⚙️ Configuration Variables
+## Configuration Variables
 
 ### Container Image Settings
 ```makefile
@@ -77,15 +74,7 @@ VM_GRAPHICS = spice                     # Graphics type (spice/vnc/none)
 VM_OS_VARIANT = rhel9.0                # OS variant for virt-install
 ```
 
-### Development Settings
-```makefile
-DEV_TAG = dev                          # Development image tag
-DEV_CONFIG = config-example.toml       # Development config file
-DEV_VM_NAME = hass-dev                 # Development VM name
-DEBUG = false                          # Enable debug mode
-```
-
-## 📝 Configuration Examples
+## Configuration Examples
 
 ### Docker Hub Deployment
 ```makefile
@@ -103,228 +92,239 @@ IMAGE_NAME = home-assistant-bootc
 CONFIG_FILE = config-production.toml
 ```
 
-### Registry Publishing
+### Production Configuration
 ```makefile
-# config-quay.mk
-REGISTRY = quay.io/myorganization
+# config-production.mk
+REGISTRY = quay.io/myorg
 IMAGE_NAME = home-assistant-bootc
 IMAGE_TAG = v1.0.0
 CONFIG_FILE = config-production.toml
-```
-
-### TOML Configuration Format
-bootc-image-builder expects TOML format with `customizations` top-level structure:
-
-```toml
-# config.toml example
-[[customizations.user]]
-name = "hass-admin"
-password = "your-encrypted-password"
-key = "ssh-rsa AAAAB3Nz... your-public-key"
-groups = ["wheel", "systemd-journal"]
-
-[[customizations.filesystem]]
-mountpoint = "/"
-minsize = "20 GiB"
-
-[[customizations.filesystem]]
-mountpoint = "/var/home-assistant"
-minsize = "50 GiB"
-
-[customizations.kernel]
-append = "quiet splash"
-```
-
-### Local Development
-```makefile
-# config-local.mk
-REGISTRY = localhost:5000
-IMAGE_TAG = test
-USE_CACHE = false
-VERBOSE = true
-DEBUG = true
-```
-
-### Production Environment
-```makefile
-# config-production.mk
-CONFIG_FILE = config-production.toml
 VM_MEMORY = 8192
 VM_VCPUS = 4
-ENABLE_HEALTH_CHECK = true
 USE_CACHE = true
+VERBOSE = false
 ```
 
-## 🛠️ Available Make Targets
-
-### Configuration Management
-```bash
-make config-show                       # Show current configuration
-make config-create                     # Create custom config file
-make config-template                   # Create template configurations
-make info                             # Show detailed build information
+### Development Configuration
+```makefile
+# config-dev.mk
+REGISTRY = localhost:5000
+IMAGE_NAME = home-assistant-bootc
+IMAGE_TAG = dev
+CONFIG_FILE = config-example.toml
+VM_MEMORY = 2048
+VM_VCPUS = 1
+USE_CACHE = false
+VERBOSE = true
 ```
 
-### Build Targets
-```bash
-make build                            # Build container image
-make push                             # Push image to registry
-make qcow2                            # Build qcow2 VM image
-make iso                              # Build ISO installer
-make raw                              # Build raw disk image
-make all                              # Build all formats
+## Filesystem Types
+
+### ext4 (Default)
+- **Pros**: Most stable, widely supported, good performance
+- **Cons**: No snapshots, limited advanced features
+- **Use case**: General purpose, maximum compatibility
+
+### xfs
+- **Pros**: Excellent performance for large files, RHEL/CentOS default
+- **Cons**: No snapshots, limited shrinking capability
+- **Use case**: High-performance systems, large storage
+
+### btrfs
+- **Pros**: Snapshots, compression, advanced features
+- **Cons**: Less mature, potential stability issues
+- **Use case**: Advanced users, snapshot requirements
+
+## Architecture Support
+
+### Auto-detection
+The system automatically detects your architecture and sets appropriate defaults:
+- **ARM64**: Apple Silicon, ARM servers
+- **x86_64**: Intel/AMD processors
+
+### Manual Configuration
+```makefile
+# Force specific architecture
+TARGET_ARCH = arm64
+TARGET_ARCH = amd64
 ```
 
-### Deployment Targets
+## Registry Configuration
+
+### Supported Registries
+- **Quay.io**: `quay.io/username`
+- **Docker Hub**: `docker.io/username`
+- **GitHub Container Registry**: `ghcr.io/username`
+- **Private registries**: `your-registry.com/namespace`
+
+### Authentication
 ```bash
-make deploy-vm                        # Deploy VM using libvirt
-make vm                               # Quick VM deployment
-make clean-vm                         # Remove deployed VM
+# Login to registry
+podman login quay.io
+podman login docker.io
+podman login ghcr.io
 ```
 
-### Development Targets
-```bash
-make dev-build                        # Build with development settings
-make dev-qcow2                        # Build development qcow2
-make dev-deploy                       # Deploy development VM
+## VM Configuration
+
+### Memory and CPU
+```makefile
+# Small VM (development)
+VM_MEMORY = 2048
+VM_VCPUS = 1
+
+# Medium VM (home use)
+VM_MEMORY = 4096
+VM_VCPUS = 2
+
+# Large VM (production)
+VM_MEMORY = 8192
+VM_VCPUS = 4
 ```
 
-## 🎯 Use Cases
+### Network Configuration
+```makefile
+# Default network
+VM_NETWORK = default
 
-### Scenario 1: Local Development
-```bash
-# Create development configuration
-make config-template-development
+# Bridge network
+VM_NETWORK = br0
 
-# Build and deploy development environment
-make dev-build CONFIG_MK=config-development.mk
-make dev-deploy CONFIG_MK=config-development.mk
+# Host network
+VM_NETWORK = host
 ```
 
-### Scenario 2: Multi-Registry Deployment
-```bash
-# Build for Docker Hub
-make build CONFIG_MK=config-dockerhub.mk
-make push CONFIG_MK=config-dockerhub.mk
+### Graphics Options
+```makefile
+# SPICE (recommended)
+VM_GRAPHICS = spice
 
-# Build for GitHub Container Registry
-make build CONFIG_MK=config-ghcr.mk
-make push CONFIG_MK=config-ghcr.mk
+# VNC
+VM_GRAPHICS = vnc
+
+# No graphics (headless)
+VM_GRAPHICS = none
 ```
 
-### Scenario 3: Different VM Configurations
-```bash
-# Small VM for testing
-echo "VM_MEMORY = 2048" > config-small.mk
-echo "VM_VCPUS = 1" >> config-small.mk
-make deploy-vm CONFIG_MK=config-small.mk
+## Build Options
 
-# Large VM for production
-echo "VM_MEMORY = 8192" > config-large.mk
-echo "VM_VCPUS = 4" >> config-large.mk
-make deploy-vm CONFIG_MK=config-large.mk
+### Cache Control
+```makefile
+# Enable cache (faster builds)
+USE_CACHE = true
+
+# Disable cache (clean builds)
+USE_CACHE = false
 ```
 
-### Scenario 4: Registry Publishing Workflow
-```bash
-# Create publishing configuration
-echo "REGISTRY = quay.io/myorg" > config-publish.mk
-echo "IMAGE_TAG = v1.0.0" >> config-publish.mk
+### Verbose Output
+```makefile
+# Normal output
+VERBOSE = false
 
-# Build and publish
-make build CONFIG_MK=config-publish.mk
-sudo podman login quay.io
-make push CONFIG_MK=config-publish.mk
-
-# Verify in registry web interface
-echo "Check https://quay.io/repository/myorg/fedora-bootc-hass"
-```
-
-### Scenario 5: Different Filesystem Types
-```bash
-# Build with XFS filesystem (RHEL/CentOS style)
-echo "ROOTFS_TYPE = xfs" > config-xfs.mk
-make qcow2 CONFIG_MK=config-xfs.mk
-
-# Build with Btrfs filesystem (modern with snapshots)
-echo "ROOTFS_TYPE = btrfs" > config-btrfs.mk
-make qcow2 CONFIG_MK=config-btrfs.mk
-
-# Build with ext4 filesystem (default, most compatible)
-echo "ROOTFS_TYPE = ext4" > config-ext4.mk
-make qcow2 CONFIG_MK=config-ext4.mk
-```
-
-## 🔧 Advanced Configuration
-
-### Environment Variables
-You can also override any configuration using environment variables:
-```bash
-# Override registry for one build
-REGISTRY=my-registry.com make build
-
-# Override multiple variables
-VM_MEMORY=6144 VM_VCPUS=3 make deploy-vm
+# Detailed output
+VERBOSE = true
 ```
 
 ### Build Arguments
 ```makefile
 # Add custom build arguments
-BUILD_ARGS = --build-arg HTTP_PROXY=http://proxy:8080
+BUILD_ARGS += --build-arg CUSTOM_VAR=value
+BUILD_ARGS += --build-arg ANOTHER_VAR=value
 ```
 
-### Runtime Arguments
+## Environment-specific Configurations
+
+### Development Environment
 ```makefile
-# Add custom runtime arguments
-RUN_ARGS = --security-opt label=disable
+# config-dev.mk
+IMAGE_TAG = dev
+CONFIG_FILE = config-example.toml
+VM_MEMORY = 2048
+VM_VCPUS = 1
+USE_CACHE = false
+VERBOSE = true
 ```
 
-## 📁 File Structure
-```
-├── config.mk                         # Default configuration
-├── config-custom.mk.example          # Example custom configuration
-├── config-*.mk                       # Custom configurations (gitignored)
-├── Makefile                          # Build automation
-└── CONFIGURATION.md                  # This documentation
+### Testing Environment
+```makefile
+# config-test.mk
+IMAGE_TAG = test
+CONFIG_FILE = config-test.toml
+VM_MEMORY = 4096
+VM_VCPUS = 2
+USE_CACHE = true
+VERBOSE = false
 ```
 
-## 🔍 Troubleshooting
+### Production Environment
+```makefile
+# config-prod.mk
+IMAGE_TAG = v1.0.0
+CONFIG_FILE = config-production.toml
+VM_MEMORY = 8192
+VM_VCPUS = 4
+USE_CACHE = true
+VERBOSE = false
+```
 
-### Configuration Not Found
+## Best Practices
+
+### Configuration Management
+1. **Use descriptive names**: `config-production.mk`, `config-dev.mk`
+2. **Version control**: Include configuration files in version control
+3. **Documentation**: Add comments explaining custom settings
+4. **Testing**: Test configurations before production use
+
+### Security Considerations
+1. **Registry credentials**: Use robot accounts for automated builds
+2. **Network isolation**: Use separate networks for different environments
+3. **Access control**: Limit VM access based on requirements
+
+### Performance Optimization
+1. **Cache usage**: Enable cache for faster builds
+2. **Resource allocation**: Match VM resources to workload
+3. **Filesystem selection**: Choose appropriate filesystem for use case
+
+## Troubleshooting
+
+### Common Issues
+
+**Configuration not found:**
 ```bash
-# Check if configuration file exists
-ls -la config*.mk
+# Check if file exists
+ls -la config.mk
 
-# Create from example
-cp config-custom.mk.example my-config.mk
+# Use absolute path
+make build CONFIG_MK=/full/path/to/config.mk
 ```
 
-### Variable Not Working
+**Build fails with custom config:**
 ```bash
-# Show current configuration
+# Validate configuration
 make config-show CONFIG_MK=my-config.mk
 
-# Validate syntax
-make -n build CONFIG_MK=my-config.mk
+# Check for syntax errors
+cat my-config.mk
 ```
 
-### Build Issues
+**VM deployment issues:**
 ```bash
-# Enable verbose output
-echo "VERBOSE = true" >> my-config.mk
-make build CONFIG_MK=my-config.mk
+# Check VM settings
+make config-show CONFIG_MK=my-config.mk | grep VM_
 
-# Disable cache
-echo "USE_CACHE = false" >> my-config.mk
-make build CONFIG_MK=my-config.mk
+# Verify libvirt configuration
+sudo systemctl status libvirtd
 ```
 
-## 💡 Tips and Best Practices
+### Debugging Configuration
+```bash
+# Show all configuration values
+make config-show CONFIG_MK=my-config.mk
 
-1. **Use descriptive configuration file names**: `config-production.mk`, `config-testing.mk`
-2. **Keep sensitive data out of configuration files**: Use environment variables for passwords
-3. **Document your custom configurations**: Add comments explaining your choices
-4. **Test configurations**: Use `make config-show` to verify settings before building
-5. **Version control**: Add custom configs to `.gitignore` to avoid committing sensitive data
+# Show specific variable
+make config-show CONFIG_MK=my-config.mk | grep IMAGE_NAME
 
-This flexible configuration system allows you to easily manage multiple environments and deployment scenarios while keeping your builds consistent and reproducible.
+# Test configuration
+make build CONFIG_MK=my-config.mk VERBOSE=true
+```
