@@ -59,11 +59,11 @@ LABEL maintainer="Home Assistant bootc Image" \
 COPY repos/zerotier.repo /etc/yum.repos.d/zerotier.repo
 
 # ===================================================================
-# FIX: Remove vulnerable packages from the final production stage.
-# This resolves vulnerabilities introduced by toolbox and related packages.
+# FIX 1: Target the removal to only the necessary packages (toolbox and go).
+# This avoids removing essential components like `bootc` and `rpm-ostree`.
 # ===================================================================
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
-    dnf -y remove toolbox* container-tools* golang* buildah* skopeo* podman-compose* go-toolset* golang-*mapstructure* golang-github* runc* crun* conmon* || true && \
+    dnf -y remove toolbox* golang* go-toolset* || true && \
     dnf -y autoremove && \
     dnf clean all
 
@@ -89,14 +89,14 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     htop python3-pip logrotate \
     && dnf clean all
 
-# ===================================================================
-# FIX: Remove system urllib3 and force install the patched version.
-# This resolves GHSA-pq67-6m6q-mj2v and GHSA-48p4-8xcf-vxj5.
-# ===================================================================
+# Vulnerability fix for urllib3
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     dnf -y remove python3-urllib3 || true && \
     pip3 install --upgrade --force-reinstall \
     urllib3==2.5.0 requests cryptography
+
+# FIX 3: Declare TIMEZONE build-arg to suppress build warnings
+ARG TIMEZONE
 
 # PERFORMANCE: Combine system configuration in single layer
 RUN firewall-offline-cmd --add-port=8123/tcp && \
@@ -150,7 +150,7 @@ RUN chmod +x ${HASS_SCRIPTS_DIR}/*.sh && \
 
 # PERFORMANCE: Final cleanup in single layer
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
-    dnf -y remove gcc gcc-c++ make automake autoconf libtool || true && \
+    dnf -y remove gcc gcc-c++ make automake autoconf || true && \
     dnf clean all && \
     rm -rf /var/cache/dnf/* /tmp/* /var/tmp/* && \
     # Remove unnecessary documentation
@@ -176,10 +176,12 @@ FROM production as security-hardened
 # SECURITY: Enhanced vulnerability mitigation
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     --mount=type=cache,target=/var/lib/dnf,sharing=locked \
-    # Remove ALL potentially vulnerable packages aggressively
+    # ===================================================================
+    # FIX 2: Remove `libtool*` to avoid dependency conflicts with `sudo`.
+    # ===================================================================
     dnf -y remove \
         *-devel *-debuginfo *-debugsource \
-        gcc* make* automake* autoconf* libtool* \
+        gcc* make* automake* autoconf* \
         cmake* kernel-devel* kernel-headers* || true && \
     # Force remove vulnerable libs
     dnf -y remove \
