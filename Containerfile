@@ -58,6 +58,15 @@ LABEL maintainer="Home Assistant bootc Image" \
 # Copy optimized repository configs
 COPY repos/zerotier.repo /etc/yum.repos.d/zerotier.repo
 
+# ===================================================================
+# FIX: Remove vulnerable packages from the final production stage.
+# This resolves vulnerabilities introduced by toolbox and related packages.
+# ===================================================================
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    dnf -y remove toolbox* container-tools* golang* buildah* skopeo* podman-compose* go-toolset* golang-*mapstructure* golang-github* runc* crun* conmon* || true && \
+    dnf -y autoremove && \
+    dnf clean all
+
 # PERFORMANCE: Install packages in optimal order (frequently changing last)
 # 1. Essential system packages (rarely change)
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
@@ -65,7 +74,7 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     grep -v '^#' /deps/bindep.txt | grep -v '^$' | \
     head -20 | xargs dnf -y install
 
-# 2. Development and utility packages (change occasionally)  
+# 2. Development and utility packages (change occasionally)
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     dnf -y install \
     git curl wget nano vim-enhanced \
@@ -80,8 +89,13 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     htop python3-pip logrotate \
     && dnf clean all
 
-# PERFORMANCE: Python packages optimization 
-RUN pip3 install --upgrade --force-reinstall \
+# ===================================================================
+# FIX: Remove system urllib3 and force install the patched version.
+# This resolves GHSA-pq67-6m6q-mj2v and GHSA-48p4-8xcf-vxj5.
+# ===================================================================
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    dnf -y remove python3-urllib3 || true && \
+    pip3 install --upgrade --force-reinstall \
     urllib3==2.5.0 requests cryptography
 
 # PERFORMANCE: Combine system configuration in single layer
@@ -164,9 +178,6 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     --mount=type=cache,target=/var/lib/dnf,sharing=locked \
     # Remove ALL potentially vulnerable packages aggressively
     dnf -y remove \
-        toolbox* container-tools* golang* buildah* skopeo* \
-        podman-compose* go-toolset* golang-*mapstructure* \
-        golang-github* runc* conmon* crun* \
         *-devel *-debuginfo *-debugsource \
         gcc* make* automake* autoconf* libtool* \
         cmake* kernel-devel* kernel-headers* || true && \
@@ -232,10 +243,9 @@ RUN chmod 700 /root && \
     find /etc -type f -name "*.conf" -exec chmod 644 {} \; && \
     find /etc -type f -name "*passwd*" -exec chmod 640 {} \; && \
     find /etc -type f -name "*shadow*" -exec chmod 600 {} \;
-
-# SECURITY: Update labels with enhanced security info  
+# SECURITY: Update labels with enhanced security info
 LABEL security.hardened="enhanced" \
       security.scan.date="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
-      security.vulnerabilities.removed="toolbox,golang,mapstructure" \
+      security.vulnerabilities.removed="toolbox,golang,mapstructure,urllib3" \
       security.level="high" \
       security.compliance="cis-basic"
