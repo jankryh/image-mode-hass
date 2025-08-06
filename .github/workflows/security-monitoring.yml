@@ -108,54 +108,61 @@ jobs:
         # Comprehensive Trivy scan with error handling
         echo "Running SARIF scan..."
         trivy image \
+          --exit-code 0 \
           --format sarif \
           --output ${{ env.SCAN_RESULTS_DIR }}/trivy-results.sarif \
           --severity HIGH,CRITICAL \
-          "$SCAN_IMAGE" || echo "SARIF scan failed, continuing..."
+          --ignore-unfixed \
+          "$SCAN_IMAGE"
 
         echo "Running table report..."
         trivy image \
+          --exit-code 0 \
           --format table \
           --output ${{ env.SCAN_RESULTS_DIR }}/trivy-table.txt \
           --severity HIGH,CRITICAL \
-          "$SCAN_IMAGE" || echo "Table scan failed, continuing..."
+          --ignore-unfixed \
+          "$SCAN_IMAGE"
 
         echo "Running JSON report..."
         trivy image \
+          --exit-code 0 \
           --format json \
           --output ${{ env.SCAN_RESULTS_DIR }}/trivy-results.json \
           --severity HIGH,CRITICAL \
-          "$SCAN_IMAGE" || echo "JSON scan failed, continuing..."
+          --ignore-unfixed \
+          "$SCAN_IMAGE"
         
         echo "✅ Trivy scans completed"
 
+    
     - name: Run Grype vulnerability scan
+      continue-on-error: true
       run: |
-        # Use the same image detection logic as Trivy
-        SCAN_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-        
-        if podman images | grep -q "security-scan-image:latest"; then
-          SCAN_IMAGE="security-scan-image:latest"
-          echo "Grype scanning: $SCAN_IMAGE"
-        elif podman images | grep -q "fedora-bootc-hass"; then
-          SCAN_IMAGE=$(podman images --format "{{.Repository}}:{{.Tag}}" | grep fedora-bootc-hass | head -1)
-          echo "Grype scanning: $SCAN_IMAGE"
-        else
-          echo "Using fallback base image for Grype scan"
-          SCAN_IMAGE="quay.io/fedora/fedora-bootc:42"
-        fi
-        
-        echo "Running Grype scans..."
-        grype "$SCAN_IMAGE" \
-          -o sarif \
-          --file ${{ env.SCAN_RESULTS_DIR }}/grype-results.sarif || echo "Grype SARIF scan failed, continuing..."
-
-        grype "$SCAN_IMAGE" \
-          -o table \
-          --file ${{ env.SCAN_RESULTS_DIR }}/grype-table.txt || echo "Grype table scan failed, continuing..."
-        
-        echo "✅ Grype scans completed"
-
+          # Use the same image detection logic as Trivy
+          SCAN_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" || echo "Grype scan failed, continuing..."
+          
+          if podman images | grep -q "security-scan-image:latest"; then
+            SCAN_IMAGE="security-scan-image:latest"
+            echo "Grype scanning: $SCAN_IMAGE"
+          elif podman images | grep -q "fedora-bootc-hass"; then
+            SCAN_IMAGE=$(podman images --format "{{.Repository}}:{{.Tag}}" | grep fedora-bootc-hass | head -1)
+            echo "Grype scanning: $SCAN_IMAGE"
+          else
+            echo "Using fallback base image for Grype scan"
+            SCAN_IMAGE="quay.io/fedora/fedora-bootc:42"
+          fi
+          
+          echo "Running Grype scans..."
+          grype "$SCAN_IMAGE" \
+            -o sarif \
+            --file ${{ env.SCAN_RESULTS_DIR }}/grype-results.sarif
+  
+          grype "$SCAN_IMAGE" \
+            -o table \
+            --file ${{ env.SCAN_RESULTS_DIR }}/grype-table.txt
+          
+          echo "✅ Grype scans completed"
     - name: Run container configuration scan
       run: |
         # Scan for container misconfigurations
