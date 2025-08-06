@@ -58,10 +58,7 @@ LABEL maintainer="Home Assistant bootc Image" \
 # Copy optimized repository configs
 COPY repos/zerotier.repo /etc/yum.repos.d/zerotier.repo
 
-# ===================================================================
-# FIX 1: Target the removal to only the necessary packages (toolbox and go).
-# This avoids removing essential components like `bootc` and `rpm-ostree`.
-# ===================================================================
+# Target the removal to only the necessary packages (toolbox and go).
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     dnf -y remove toolbox* golang* go-toolset* || true && \
     dnf -y autoremove && \
@@ -95,7 +92,7 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     pip3 install --upgrade --force-reinstall \
     urllib3==2.5.0 requests cryptography
 
-# FIX 3: Declare TIMEZONE build-arg to suppress build warnings
+# Declare TIMEZONE build-arg to suppress build warnings
 ARG TIMEZONE
 
 # PERFORMANCE: Combine system configuration in single layer
@@ -176,9 +173,7 @@ FROM production as security-hardened
 # SECURITY: Enhanced vulnerability mitigation
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     --mount=type=cache,target=/var/lib/dnf,sharing=locked \
-    # ===================================================================
-    # FIX 2: Remove `libtool*` to avoid dependency conflicts with `sudo`.
-    # ===================================================================
+    # Remove build tools, avoiding libtool which causes dependency issues.
     dnf -y remove \
         *-devel *-debuginfo *-debugsource \
         gcc* make* automake* autoconf* \
@@ -190,8 +185,12 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     dnf -y autoremove && \
     dnf clean all
 
-# SECURITY: Force latest security updates (second pass)
+# ===================================================================
+# FIX: Clean all dnf metadata and mirrors before making a new cache.
+# This prevents errors from out-of-sync or unavailable mirrors (HTTP 404).
+# ===================================================================
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    dnf clean all && \
     dnf makecache --refresh && \
     dnf -y check-update --security || true && \
     dnf -y upgrade --refresh --security --nobest && \
