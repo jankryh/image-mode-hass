@@ -57,6 +57,35 @@ endif
 # Options: ext4 (default, stable), xfs (RHEL/CentOS default), btrfs (modern, snapshots)
 ROOTFS_TYPE ?= ext4
 
+# Target architecture for builds
+# Options: auto (detect), arm64 (Apple Silicon/ARM64), amd64 (Intel x86_64)
+TARGET_ARCH ?= auto
+
+# Auto-detect architecture if not specified
+ifeq ($(TARGET_ARCH),auto)
+    DETECTED_ARCH := $(shell uname -m)
+    ifeq ($(DETECTED_ARCH),arm64)
+        TARGET_ARCH = arm64
+        PLATFORM_SUFFIX = 
+    else ifeq ($(DETECTED_ARCH),x86_64)
+        TARGET_ARCH = amd64
+        PLATFORM_SUFFIX = 
+    else
+        TARGET_ARCH = amd64
+        PLATFORM_SUFFIX = 
+    endif
+else ifeq ($(TARGET_ARCH),arm64)
+    PLATFORM_SUFFIX = 
+else ifeq ($(TARGET_ARCH),amd64)
+    PLATFORM_SUFFIX = -x86
+else
+    PLATFORM_SUFFIX = -x86
+endif
+
+# Full image name with architecture suffix
+ARCH_IMAGE_NAME = $(IMAGE_NAME)$(PLATFORM_SUFFIX)
+FULL_ARCH_IMAGE_NAME = $(REGISTRY)/$(ARCH_IMAGE_NAME):$(IMAGE_TAG)
+
 #==========================================
 # Virtual Machine Configuration
 #==========================================

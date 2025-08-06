@@ -35,15 +35,24 @@ sudo make deploy-vm
 # Or create ISO for hardware installation
 sudo make iso
 
+# Cross-platform builds (NEW!)
+make show-arch          # Show architecture info
+make build-x86          # Build x86_64 container
+make iso-x86            # Build x86_64 ISO for bare metal
+make raw-x86            # Build x86_64 raw disk image
+
 # After deployment/installation, run first-time setup
 sudo /opt/hass-scripts/setup-hass.sh
 ```
 
 💡 **After installation**: Your system includes pre-installed management scripts at `/opt/hass-scripts/` for backup, restore, updates, and monitoring!
 
+📖 **Cross-Platform Guide**: See [Cross-Platform Deployment](docs/CROSS_PLATFORM_DEPLOYMENT.md) for complete architecture support details.
+
 ## 📋 Table of Contents
 
 - [Features](#-features)
+- [Cross-Platform Support](docs/CROSS_PLATFORM_DEPLOYMENT.md) 🆕
 - [Requirements](#-requirements)
 - [Preparation and Build](#-preparation-and-build)
 - [Build Architecture & Dependency Management](#%EF%B8%8F-build-architecture--dependency-management)
@@ -71,6 +80,7 @@ sudo /opt/hass-scripts/setup-hass.sh
 
 ### **✨ NEW: Advanced Optimizations**
 - **⚡ Performance Optimized**: 60-70% faster builds with multi-stage caching and parallel processing
+- **🏗️ Cross-Platform Support**: ARM64 (Apple Silicon) + x86_64 (Intel/AMD) with automated GitHub Actions
 - **📦 Advanced Dependency Management**: Automated version tracking, security monitoring, and compatibility checking
 - **🔐 Enterprise Secrets Management**: AES-256 encrypted secrets vault with environment isolation
 - **📊 Performance Monitoring**: Comprehensive benchmarking and automated reporting

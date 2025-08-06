@@ -39,6 +39,8 @@ BUILD_CPUS ?= $(shell nproc)
 .PHONY: config-create config-show config-template validate-config info benchmark
 .PHONY: deps-update deps-check performance-test test test-scripts test-integration version version-bump release
 .PHONY: security-scan security-quick security-report security-monitor security-install
+# Cross-platform targets
+.PHONY: build-x86 build-arm64 iso-x86 iso-arm64 qcow2-x86 qcow2-arm64 show-arch
 
 help: ## Show this help message with performance features
 	@echo "Optimized Home Assistant bootc Build System"
@@ -51,6 +53,17 @@ help: ## Show this help message with performance features
 	@echo ""
 	@echo "Available targets:"
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@echo ""
+	@echo "📱 Cross-Platform Targets:"
+	@echo "  show-arch           Show architecture information"
+	@echo "  build-x86           Build x86_64 container image"
+	@echo "  build-arm64         Build ARM64 container image"
+	@echo "  iso-x86             Build x86_64 ISO installer"
+	@echo "  iso-arm64           Build ARM64 ISO installer"
+	@echo "  qcow2-x86           Build x86_64 qcow2 image"
+	@echo "  qcow2-arm64         Build ARM64 qcow2 image"
+	@echo "  raw-x86             Build x86_64 raw disk image for bare metal"
+	@echo "  raw-arm64           Build ARM64 raw disk image for bare metal"
 
 # High-performance build with advanced caching (now standard)
 build: ## High-performance build with caching and optimization
@@ -135,7 +148,7 @@ qcow2: build pull-deps ## Build high-performance qcow2 with compression and tuni
 			--type qcow2 \
 			--rootfs $(ROOTFS_TYPE) \
 			--config /config.toml \
-			--compress \
+
 			$(FULL_IMAGE_NAME); \
 	else \
 		time sudo podman run \
@@ -149,7 +162,7 @@ qcow2: build pull-deps ## Build high-performance qcow2 with compression and tuni
 			--type qcow2 \
 			--rootfs $(ROOTFS_TYPE) \
 			--config /config.toml \
-			--compress \
+
 			$(FULL_IMAGE_NAME); \
 	fi
 	@echo "✅ qcow2 image created in $(OUTPUT_DIR)/"
@@ -271,6 +284,93 @@ raw: build pull-deps ## Build raw disk image (requires rootful podman)
 			$(FULL_IMAGE_NAME); \
 	fi
 	@echo "✅ Raw disk image created in $(OUTPUT_DIR)/"
+
+raw-x86: build-x86 pull-deps ## Build x86_64 raw disk image for bare metal
+	@echo "🔧 Building x86_64 raw disk image for bare metal..."
+	@echo "⚠️  Note: bootc-image-builder requires rootful podman daemon"
+	@mkdir -p $(OUTPUT_DIR)
+	@echo "Using configuration file: $(CONFIG_FILE)"
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		echo "📍 On macOS: Configuring podman machine for rootful mode"; \
+		podman machine stop 2>/dev/null || true; \
+		podman machine set --rootful || echo "⚠️  Failed to set rootful mode"; \
+		podman machine start || echo "⚠️  Failed to start machine"; \
+		sleep 3; \
+		echo "🔄 Ensuring x86_64 image is available in rootful context..."; \
+		sudo podman pull $(REGISTRY)/$(IMAGE_NAME)-x86:$(IMAGE_TAG) 2>/dev/null || \
+		echo "⚠️  Image not found in registry - trying local build"; \
+		sudo podman run \
+			--rm -it --privileged --pull=newer \
+			--security-opt label=type:unconfined_t \
+			-v /var/lib/containers/storage:/var/lib/containers/storage \
+			-v ./$(CONFIG_FILE):/config.toml:ro \
+			-v $(OUTPUT_DIR):/output \
+			quay.io/centos-bootc/bootc-image-builder:latest \
+			--type raw \
+			--rootfs $(ROOTFS_TYPE) \
+			--target-arch x86_64 \
+			--config /config.toml \
+			$(REGISTRY)/$(IMAGE_NAME)-x86:$(IMAGE_TAG); \
+	else \
+		echo "⚠️  On Linux: Make sure podman daemon is in rootful mode"; \
+		sudo podman run \
+			--rm -it --privileged --pull=newer \
+			--security-opt label=type:unconfined_t \
+			-v /var/lib/containers/storage:/var/lib/containers/storage \
+			-v ./$(CONFIG_FILE):/config.toml:ro \
+			-v $(OUTPUT_DIR):/output \
+			quay.io/centos-bootc/bootc-image-builder:latest \
+			--type raw \
+			--rootfs $(ROOTFS_TYPE) \
+			--target-arch x86_64 \
+			--config /config.toml \
+			$(REGISTRY)/$(IMAGE_NAME)-x86:$(IMAGE_TAG); \
+	fi
+	@echo "✅ x86_64 raw disk image created in $(OUTPUT_DIR)/image/"
+	@echo "📦 Image ready for bare metal deployment:"
+	@echo "   Write to USB/SSD: sudo dd if=output/image/disk.raw of=/dev/sdX bs=1M status=progress"
+
+raw-arm64: build-arm64 pull-deps ## Build ARM64 raw disk image for bare metal
+	@echo "🔧 Building ARM64 raw disk image for bare metal..."
+	@echo "⚠️  Note: bootc-image-builder requires rootful podman daemon"
+	@mkdir -p $(OUTPUT_DIR)
+	@echo "Using configuration file: $(CONFIG_FILE)"
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		echo "📍 On macOS: Configuring podman machine for rootful mode"; \
+		podman machine stop 2>/dev/null || true; \
+		podman machine set --rootful || echo "⚠️  Failed to set rootful mode"; \
+		podman machine start || echo "⚠️  Failed to start machine"; \
+		sleep 3; \
+		sudo podman run \
+			--rm -it --privileged --pull=newer \
+			--security-opt label=type:unconfined_t \
+			-v /var/lib/containers/storage:/var/lib/containers/storage \
+			-v ./$(CONFIG_FILE):/config.toml:ro \
+			-v $(OUTPUT_DIR):/output \
+			quay.io/centos-bootc/bootc-image-builder:latest \
+			--type raw \
+			--rootfs $(ROOTFS_TYPE) \
+			--target-arch aarch64 \
+			--config /config.toml \
+			$(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG); \
+	else \
+		echo "⚠️  On Linux: Make sure podman daemon is in rootful mode"; \
+		sudo podman run \
+			--rm -it --privileged --pull=newer \
+			--security-opt label=type:unconfined_t \
+			-v /var/lib/containers/storage:/var/lib/containers/storage \
+			-v ./$(CONFIG_FILE):/config.toml:ro \
+			-v $(OUTPUT_DIR):/output \
+			quay.io/centos-bootc/bootc-image-builder:latest \
+			--type raw \
+			--rootfs $(ROOTFS_TYPE) \
+			--target-arch aarch64 \
+			--config /config.toml \
+			$(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG); \
+	fi
+	@echo "✅ ARM64 raw disk image created in $(OUTPUT_DIR)/image/"
+	@echo "📦 Image ready for bare metal deployment:"
+	@echo "   Write to USB/SSD: sudo dd if=output/image/disk.raw of=/dev/sdX bs=1M status=progress"
 
 # High-performance VM deployment (now standard)
 deploy-vm: qcow2 ## Deploy high-performance VM with optimized settings
@@ -532,6 +632,204 @@ build-secure: ## Build with enhanced security (removes vulnerable packages)
 		--label "bootc.security.hardened=true" \
 		.
 	@echo "✅ Secure image built: $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)-secure"
+
+#==========================================
+# Cross-Platform Architecture Support
+#==========================================
+
+show-arch: ## Show current and target architecture information
+	@echo "Architecture Information:"
+	@echo "  Host Architecture: $(shell uname -m)"
+	@echo "  Target Architecture: $(TARGET_ARCH)"
+	@echo "  Platform Suffix: $(PLATFORM_SUFFIX)"
+	@echo "  Image Name: $(ARCH_IMAGE_NAME)"
+	@echo "  Full Image Name: $(FULL_ARCH_IMAGE_NAME)"
+
+build-x86: ## Build container image for x86_64 architecture
+	@echo "🔧 Building x86_64 image: $(REGISTRY)/$(IMAGE_NAME)-x86:$(IMAGE_TAG)"
+	sudo $(CONTAINER_RUNTIME) build \
+		--platform linux/amd64 \
+		$(BUILD_FLAGS) \
+		--build-arg TIMEZONE=$(TIMEZONE) \
+		-t $(REGISTRY)/$(IMAGE_NAME)-x86:$(IMAGE_TAG) \
+		.
+	@echo "✅ x86_64 build completed: $(REGISTRY)/$(IMAGE_NAME)-x86:$(IMAGE_TAG)"
+
+build-arm64: ## Build container image for ARM64 architecture
+	@echo "🔧 Building ARM64 image: $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)"
+	sudo $(CONTAINER_RUNTIME) build \
+		--platform linux/arm64 \
+		$(BUILD_FLAGS) \
+		--build-arg TIMEZONE=$(TIMEZONE) \
+		-t $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG) \
+		.
+	@echo "✅ ARM64 build completed: $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)"
+
+iso-x86: build-x86 pull-deps ## Build x86_64 ISO installer
+	@echo "🔧 Building x86_64 ISO installer..."
+	@echo "⚠️  Note: bootc-image-builder requires rootful podman daemon"
+	@mkdir -p $(OUTPUT_DIR)
+	@echo "Using configuration file: $(CONFIG_FILE)"
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		echo "📍 On macOS: Configuring podman machine for rootful mode"; \
+		podman machine stop 2>/dev/null || true; \
+		podman machine set --rootful || echo "⚠️  Failed to set rootful mode"; \
+		podman machine start || echo "⚠️  Failed to start machine"; \
+		sleep 3; \
+		echo "🔄 Ensuring x86_64 image is available in rootful context..."; \
+		sudo podman pull $(REGISTRY)/$(IMAGE_NAME)-x86:$(IMAGE_TAG) 2>/dev/null || \
+		echo "⚠️  Image not found in registry - trying local build"; \
+		sudo podman run \
+			--rm -it --privileged --pull=newer \
+			--security-opt label=type:unconfined_t \
+			-v /var/lib/containers/storage:/var/lib/containers/storage \
+			-v ./$(CONFIG_FILE):/config.toml:ro \
+			-v $(OUTPUT_DIR):/output \
+			quay.io/centos-bootc/bootc-image-builder:latest \
+			--type iso \
+			--rootfs $(ROOTFS_TYPE) \
+			--target-arch x86_64 \
+			--config /config.toml \
+			$(REGISTRY)/$(IMAGE_NAME)-x86:$(IMAGE_TAG); \
+	else \
+		echo "🔄 Ensuring x86_64 image is available for bootc-image-builder..."; \
+		sudo podman pull $(REGISTRY)/$(IMAGE_NAME)-x86:$(IMAGE_TAG) 2>/dev/null || \
+		echo "⚠️  Image not found in registry - using local build"; \
+		sudo podman run \
+			--rm -it --privileged --pull=newer \
+			--security-opt label=type:unconfined_t \
+			-v /var/lib/containers/storage:/var/lib/containers/storage \
+			-v ./$(CONFIG_FILE):/config.toml:ro \
+			-v $(OUTPUT_DIR):/output \
+			quay.io/centos-bootc/bootc-image-builder:latest \
+			--type iso \
+			--rootfs $(ROOTFS_TYPE) \
+			--target-arch x86_64 \
+			--config /config.toml \
+			$(REGISTRY)/$(IMAGE_NAME)-x86:$(IMAGE_TAG); \
+	fi
+	@echo "✅ x86_64 ISO installer created in $(OUTPUT_DIR)/"
+
+iso-arm64: build-arm64 pull-deps ## Build ARM64 ISO installer  
+	@echo "🔧 Building ARM64 ISO installer..."
+	@echo "⚠️  Note: bootc-image-builder requires rootful podman daemon"
+	@mkdir -p $(OUTPUT_DIR)
+	@echo "Using configuration file: $(CONFIG_FILE)"
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		echo "📍 On macOS: Configuring podman machine for rootful mode"; \
+		podman machine stop 2>/dev/null || true; \
+		podman machine set --rootful || echo "⚠️  Failed to set rootful mode"; \
+		podman machine start || echo "⚠️  Failed to start machine"; \
+		sleep 3; \
+		echo "🔄 Ensuring ARM64 image is available in rootful context..."; \
+		sudo podman pull $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG) 2>/dev/null || \
+		echo "⚠️  Image not found in registry - trying local build"; \
+		sudo podman run \
+			--rm -it --privileged --pull=newer \
+			--security-opt label=type:unconfined_t \
+			-v /var/lib/containers/storage:/var/lib/containers/storage \
+			-v ./$(CONFIG_FILE):/config.toml:ro \
+			-v $(OUTPUT_DIR):/output \
+			quay.io/centos-bootc/bootc-image-builder:latest \
+			--type iso \
+			--rootfs $(ROOTFS_TYPE) \
+			--target-arch aarch64 \
+			--config /config.toml \
+			$(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG); \
+	else \
+		echo "🔄 Ensuring ARM64 image is available for bootc-image-builder..."; \
+		sudo podman pull $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG) 2>/dev/null || \
+		echo "⚠️  Image not found in registry - using local build"; \
+		sudo podman run \
+			--rm -it --privileged --pull=newer \
+			--security-opt label=type:unconfined_t \
+			-v /var/lib/containers/storage:/var/lib/containers/storage \
+			-v ./$(CONFIG_FILE):/config.toml:ro \
+			-v $(OUTPUT_DIR):/output \
+			quay.io/centos-bootc/bootc-image-builder:latest \
+			--type iso \
+			--rootfs $(ROOTFS_TYPE) \
+			--target-arch aarch64 \
+			--config /config.toml \
+			$(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG); \
+	fi
+	@echo "✅ ARM64 ISO installer created in $(OUTPUT_DIR)/"
+
+qcow2-x86: build-x86 pull-deps ## Build x86_64 qcow2 image
+	@echo "🔧 Building x86_64 qcow2 image..."
+	@echo "⚠️  Note: bootc-image-builder requires rootful podman daemon"
+	@mkdir -p $(OUTPUT_DIR)
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		echo "📍 On macOS: Using podman machine for qcow2 build"; \
+		podman machine set --rootful || true; \
+		podman machine start || true; \
+		time sudo podman run \
+			--rm --privileged --pull=newer \
+			$(RUN_FLAGS) \
+			--memory=8g --cpus=$(shell nproc) \
+			-v /var/lib/containers/storage:/var/lib/containers/storage \
+			-v ./$(CONFIG_FILE):/config.toml:ro \
+			-v $(OUTPUT_DIR):/output \
+			quay.io/centos-bootc/bootc-image-builder:latest \
+			--type qcow2 \
+			--rootfs $(ROOTFS_TYPE) \
+			--target-arch x86_64 \
+			--config /config.toml \
+			$(REGISTRY)/$(IMAGE_NAME)-x86:$(IMAGE_TAG); \
+	else \
+		time sudo podman run \
+			--rm --privileged --pull=newer \
+			$(RUN_FLAGS) \
+			--memory=8g --cpus=$(shell nproc) \
+			-v /var/lib/containers/storage:/var/lib/containers/storage \
+			-v ./$(CONFIG_FILE):/config.toml:ro \
+			-v $(OUTPUT_DIR):/output \
+			quay.io/centos-bootc/bootc-image-builder:latest \
+			--type qcow2 \
+			--rootfs $(ROOTFS_TYPE) \
+			--target-arch x86_64 \
+			--config /config.toml \
+			$(REGISTRY)/$(IMAGE_NAME)-x86:$(IMAGE_TAG); \
+	fi
+	@echo "✅ x86_64 qcow2 image created in $(OUTPUT_DIR)/"
+
+qcow2-arm64: build-arm64 pull-deps ## Build ARM64 qcow2 image
+	@echo "🔧 Building ARM64 qcow2 image..."
+	@echo "⚠️  Note: bootc-image-builder requires rootful podman daemon"
+	@mkdir -p $(OUTPUT_DIR)
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		echo "📍 On macOS: Using podman machine for qcow2 build"; \
+		podman machine set --rootful || true; \
+		podman machine start || true; \
+		time sudo podman run \
+			--rm --privileged --pull=newer \
+			$(RUN_FLAGS) \
+			--memory=8g --cpus=$(shell nproc) \
+			-v /var/lib/containers/storage:/var/lib/containers/storage \
+			-v ./$(CONFIG_FILE):/config.toml:ro \
+			-v $(OUTPUT_DIR):/output \
+			quay.io/centos-bootc/bootc-image-builder:latest \
+			--type qcow2 \
+			--rootfs $(ROOTFS_TYPE) \
+			--target-arch aarch64 \
+			--config /config.toml \
+			$(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG); \
+	else \
+		time sudo podman run \
+			--rm --privileged --pull=newer \
+			$(RUN_FLAGS) \
+			--memory=8g --cpus=$(shell nproc) \
+			-v /var/lib/containers/storage:/var/lib/containers/storage \
+			-v ./$(CONFIG_FILE):/config.toml:ro \
+			-v $(OUTPUT_DIR):/output \
+			quay.io/centos-bootc/bootc-image-builder:latest \
+			--type qcow2 \
+			--rootfs $(ROOTFS_TYPE) \
+			--target-arch aarch64 \
+			--config /config.toml \
+			$(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG); \
+	fi
+	@echo "✅ ARM64 qcow2 image created in $(OUTPUT_DIR)/"
 
 # Default to high-performance build
 .DEFAULT_GOAL := build

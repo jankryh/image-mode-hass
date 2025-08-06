@@ -12,19 +12,7 @@ home = "/home/hass-admin"
 # Filesystem configuration
 [[customizations.filesystem]]
 mountpoint = "/"
-minsize = "20 GiB"
-
-[[customizations.filesystem]]
-mountpoint = "/var"
-minsize = "30 GiB"
-
-[[customizations.filesystem]]
-mountpoint = "/var/home-assistant"
-minsize = "50 GiB"
-
-[[customizations.filesystem]]
-mountpoint = "/var/log"
-minsize = "10 GiB"
+minsize = "100 GiB"
 
 # System configuration
 [customizations]
