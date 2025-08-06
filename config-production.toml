@@ -29,15 +29,22 @@ minsize = "10 GiB"
 # System configuration
 [customizations]
 hostname = "home-assistant-server"
+
+[customizations.timezone]
 timezone = "Europe/Prague"
-locale = "en_US.UTF-8"
+
+[customizations.locale]
+languages = ["en_US.UTF-8"]
+keyboard = "us"
 
 [customizations.kernel]
 append = "quiet splash"
 
 [customizations.firewall]
 ports = ["22:tcp", "8123:tcp"]
-services = ["ssh"]
+
+[customizations.firewall.services]
+enabled = ["ssh"]
 
 [customizations.services]
 enabled = [
