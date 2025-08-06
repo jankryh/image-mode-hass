@@ -33,7 +33,7 @@ BUILD_CPUS ?= $(shell nproc)
 
 # Main targets
 .PHONY: help build push clean qcow2 iso raw deploy-vm status
-.PHONY: deps-update deps-check test version security-scan
+.PHONY: deps-update deps-check test test-scripts test-integration version security-scan
 .PHONY: build-x86 build-arm64 show-arch
 
 help: ## Show this help message
@@ -41,6 +41,11 @@ help: ## Show this help message
 	@echo ""
 	@echo "Available targets:"
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@echo ""
+	@echo "Test Targets:"
+	@echo "  test                Run all tests"
+	@echo "  test-scripts        Run script tests only"
+	@echo "  test-integration    Run integration tests only"
 	@echo ""
 	@echo "Cross-Platform Targets:"
 	@echo "  show-arch           Show architecture information"
@@ -216,6 +221,16 @@ test: ## Run tests
 	@echo "Running tests..."
 	@chmod +x tests/run-all-tests.sh
 	@tests/run-all-tests.sh
+
+test-scripts: ## Run script tests only
+	@echo "Running script tests..."
+	@chmod +x tests/run-all-tests.sh
+	@tests/run-all-tests.sh --category scripts
+
+test-integration: ## Run integration tests only
+	@echo "Running integration tests..."
+	@chmod +x tests/run-all-tests.sh
+	@tests/run-all-tests.sh --category integration
 
 version: ## Show current version
 	@chmod +x scripts/version-manager.sh
