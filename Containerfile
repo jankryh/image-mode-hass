@@ -195,6 +195,7 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     dnf -y check-update --security || true && \
     dnf -y upgrade --refresh --security --nobest && \
     dnf -y distro-sync --nobest && \
+    dnf -y upgrade --refresh --advisory=FEDORA-2025-181d4984f4 && \
     dnf clean all
 
 # SECURITY: Remove unnecessary files and reduce attack surface
