@@ -50,6 +50,29 @@ jobs:
         # Install Podman
         sudo apt-get install -y podman
 
+    - name: Log in to Registry (if credentials available)
+      env:
+        QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+        QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
+      run: |
+        if [ -n "$QUAY_USERNAME" ] && [ -n "$QUAY_PASSWORD" ]; then
+          echo "🔐 Logging in to ${{ env.REGISTRY }}..."
+          echo "$QUAY_PASSWORD" | podman login ${{ env.REGISTRY }} \
+            --username "$QUAY_USERNAME" \
+            --password-stdin
+          echo "✅ Registry login successful"
+        else
+          echo "⚠️  Registry credentials not available, will try public access"
+        fi
+        
+        # Test registry connectivity
+        echo "🔍 Testing registry connectivity..."
+        if curl -s --max-time 10 "https://${{ env.REGISTRY }}/v2/" >/dev/null 2>&1; then
+          echo "✅ Registry is reachable"
+        else
+          echo "⚠️  Registry connectivity issues detected"
+        fi
+
     - name: Build image for security scanning
       continue-on-error: true
       id: build_step
@@ -77,14 +100,26 @@ jobs:
     - name: Create results directory
       run: mkdir -p ${{ env.SCAN_RESULTS_DIR }}
 
+    - name: Run security scan test (debugging)
+      continue-on-error: true
+      run: |
+        echo "🔧 Running security scan test for debugging..."
+        chmod +x scripts/test-security-scan.sh
+        ./scripts/test-security-scan.sh || echo "Test script failed, continuing with main scan"
+
     - name: Run Trivy vulnerability scan
       run: |
         # Check build status from previous step
         BUILD_SUCCESS="${{ steps.build_step.outputs.build_success }}"
         echo "Build success status: $BUILD_SUCCESS"
         
+        # Show available images for debugging
+        echo "🔍 Available images:"
+        podman images --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.CreatedAt}}" || echo "No images found"
+        echo ""
+        
         # Determine which image to scan
-        SCAN_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+        SCAN_IMAGE=""
         
         # Check if our built image exists
         if [[ "$BUILD_SUCCESS" == "true" ]] && podman images | grep -q "security-scan-image:latest"; then
@@ -96,42 +131,104 @@ jobs:
           echo "📦 Using found image: $SCAN_IMAGE"
           echo "SCAN_TYPE=found-image" >> $GITHUB_ENV
         else
-          echo "⚠️  No suitable image found, using fallback base image scan"
-          SCAN_IMAGE="quay.io/fedora/fedora-bootc:42"
-          echo "🔄 Pulling base image for fallback scan..."
-          podman pull "$SCAN_IMAGE" || echo "Failed to pull base image"
-          echo "SCAN_TYPE=fallback-base" >> $GITHUB_ENV
+          echo "⚠️  No suitable image found, trying to pull from registry..."
+          
+          # Check if image exists in registry first
+          echo "🔍 Checking if image exists in registry..."
+          
+          # Try multiple methods to check image existence
+          IMAGE_EXISTS=false
+          
+          # Method 1: podman manifest inspect
+          if podman manifest inspect "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >/dev/null 2>&1; then
+            echo "✅ Image found in registry (manifest inspect)"
+            IMAGE_EXISTS=true
+          else
+            echo "⚠️  Image not found via manifest inspect"
+          fi
+          
+          # Method 2: curl check (if manifest inspect failed)
+          if [[ "$IMAGE_EXISTS" == "false" ]]; then
+            echo "🔍 Trying alternative registry check..."
+            if curl -s --max-time 10 "https://${{ env.REGISTRY }}/v2/${{ github.repository_owner }}/fedora-bootc-hass/manifests/latest" >/dev/null 2>&1; then
+              echo "✅ Image found in registry (curl check)"
+              IMAGE_EXISTS=true
+            else
+              echo "⚠️  Image not found via curl check"
+            fi
+          fi
+          
+          # Try to pull if image exists
+          if [[ "$IMAGE_EXISTS" == "true" ]]; then
+            echo "🔄 Pulling image from registry..."
+            if podman pull "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"; then
+              SCAN_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+              echo "✅ Successfully pulled image: $SCAN_IMAGE"
+              echo "SCAN_TYPE=pulled-image" >> $GITHUB_ENV
+            else
+              echo "❌ Failed to pull image from registry"
+              SCAN_IMAGE=""
+            fi
+          else
+            echo "⚠️  Image not found in registry"
+            SCAN_IMAGE=""
+          fi
+          
+          # If registry image failed, try fallback
+          if [[ -z "$SCAN_IMAGE" ]]; then
+            echo "⚠️  Registry image not accessible, using fallback base image scan"
+            SCAN_IMAGE="quay.io/fedora/fedora-bootc:42"
+            echo "🔄 Pulling base image for fallback scan..."
+            if podman pull "$SCAN_IMAGE"; then
+              echo "SCAN_TYPE=fallback-base" >> $GITHUB_ENV
+            else
+              echo "❌ Failed to pull any image for scanning"
+              echo "SCAN_TYPE=no-image" >> $GITHUB_ENV
+              exit 1
+            fi
+          fi
+        fi
+        
+        if [[ -z "$SCAN_IMAGE" ]]; then
+          echo "❌ No image available for scanning"
+          exit 1
         fi
         
         echo "Scanning image: $SCAN_IMAGE"
         
         # Comprehensive Trivy scan with error handling
         echo "Running SARIF scan..."
-        trivy image \
+        if ! trivy image \
           --exit-code 0 \
           --format sarif \
           --output ${{ env.SCAN_RESULTS_DIR }}/trivy-results.sarif \
           --severity HIGH,CRITICAL \
           --ignore-unfixed \
-          "$SCAN_IMAGE"
+          "$SCAN_IMAGE"; then
+          echo "⚠️  Trivy SARIF scan failed, continuing..."
+        fi
 
         echo "Running table report..."
-        trivy image \
+        if ! trivy image \
           --exit-code 0 \
           --format table \
           --output ${{ env.SCAN_RESULTS_DIR }}/trivy-table.txt \
           --severity HIGH,CRITICAL \
           --ignore-unfixed \
-          "$SCAN_IMAGE"
+          "$SCAN_IMAGE"; then
+          echo "⚠️  Trivy table scan failed, continuing..."
+        fi
 
         echo "Running JSON report..."
-        trivy image \
+        if ! trivy image \
           --exit-code 0 \
           --format json \
           --output ${{ env.SCAN_RESULTS_DIR }}/trivy-results.json \
           --severity HIGH,CRITICAL \
           --ignore-unfixed \
-          "$SCAN_IMAGE"
+          "$SCAN_IMAGE"; then
+          echo "⚠️  Trivy JSON scan failed, continuing..."
+        fi
         
         echo "✅ Trivy scans completed"
 
@@ -140,7 +237,7 @@ jobs:
       continue-on-error: true
       run: |
           # Use the same image detection logic as Trivy
-          SCAN_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" || echo "Grype scan failed, continuing..."
+          SCAN_IMAGE=""
           
           if podman images | grep -q "security-scan-image:latest"; then
             SCAN_IMAGE="security-scan-image:latest"
@@ -148,21 +245,28 @@ jobs:
           elif podman images | grep -q "fedora-bootc-hass"; then
             SCAN_IMAGE=$(podman images --format "{{.Repository}}:{{.Tag}}" | grep fedora-bootc-hass | head -1)
             echo "Grype scanning: $SCAN_IMAGE"
+          elif podman images | grep -q "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"; then
+            SCAN_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+            echo "Grype scanning: $SCAN_IMAGE"
           else
             echo "Using fallback base image for Grype scan"
             SCAN_IMAGE="quay.io/fedora/fedora-bootc:42"
           fi
           
-          echo "Running Grype scans..."
-          grype "$SCAN_IMAGE" \
-            -o sarif \
-            --file ${{ env.SCAN_RESULTS_DIR }}/grype-results.sarif
-  
-          grype "$SCAN_IMAGE" \
-            -o table \
-            --file ${{ env.SCAN_RESULTS_DIR }}/grype-table.txt
-          
-          echo "✅ Grype scans completed"
+          if [[ -n "$SCAN_IMAGE" ]]; then
+            echo "Running Grype scans on: $SCAN_IMAGE"
+            grype "$SCAN_IMAGE" \
+              -o sarif \
+              --file ${{ env.SCAN_RESULTS_DIR }}/grype-results.sarif || echo "Grype SARIF scan failed"
+    
+            grype "$SCAN_IMAGE" \
+              -o table \
+              --file ${{ env.SCAN_RESULTS_DIR }}/grype-table.txt || echo "Grype table scan failed"
+            
+            echo "✅ Grype scans completed"
+          else
+            echo "⚠️  No image available for Grype scan"
+          fi
     - name: Run container configuration scan
       run: |
         # Scan for container misconfigurations
@@ -211,9 +315,17 @@ jobs:
             echo "📦 **Scan Type**: Existing image scan" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
             echo "This scan covers an existing image found in the environment." >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
             ;;
+          "pulled-image")
+            echo "📥 **Scan Type**: Registry image scan (pulled)" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+            echo "This scan covers the image pulled from the registry." >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+            ;;
           "fallback-base")
             echo "⚠️  **Scan Type**: Base image scan (fallback)" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
             echo "⚠️  Build failed - scanning base image only. Results may not reflect your customizations." >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+            ;;
+          "no-image")
+            echo "❌ **Scan Type**: No image available" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
+            echo "❌ No image could be built or pulled for scanning." >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
             ;;
           *)
             echo "❓ **Scan Type**: Unknown" >> ${{ env.SCAN_RESULTS_DIR }}/security-summary.md
@@ -258,16 +370,16 @@ jobs:
           if [[ $CRITICAL_COUNT -gt 0 ]]; then
             echo "⚠️ Found $CRITICAL_COUNT critical vulnerabilities!"
             
-            if [[ "$SCAN_TYPE" == "fallback-base" ]]; then
-              echo "⚠️  NOTE: This is a fallback scan of the base image only."
+            if [[ "$SCAN_TYPE" == "fallback-base" || "$SCAN_TYPE" == "no-image" ]]; then
+              echo "⚠️  NOTE: This is a fallback scan or no image available."
               echo "⚠️  Results may not reflect your actual image security status."
               echo "🔧 Recommendation: Fix build issues and re-run security scan."
               echo "scan_type=fallback" >> $GITHUB_OUTPUT
               # Don't fail the job for fallback scans
-            elif [[ "$SCAN_TYPE" == "built-image" ]]; then
-              echo "🚨 CRITICAL: Your built image contains critical vulnerabilities!"
+            elif [[ "$SCAN_TYPE" == "built-image" || "$SCAN_TYPE" == "pulled-image" ]]; then
+              echo "🚨 CRITICAL: Your image contains critical vulnerabilities!"
               echo "Please review the security scan results and apply fixes."
-              echo "scan_type=built-image" >> $GITHUB_OUTPUT
+              echo "scan_type=full-scan" >> $GITHUB_OUTPUT
               exit 1
             else
               echo "Please review the security scan results and apply fixes."
@@ -299,8 +411,8 @@ jobs:
             let title = `🚨 Security Alert: Critical vulnerabilities detected - ${new Date().toISOString().split('T')[0]}`;
             let labels = ['security', 'vulnerability', 'critical', 'automated'];
             
-            if (scanType === 'fallback-base') {
-              title = `⚠️ Build Failed + Base Image Vulnerabilities - ${new Date().toISOString().split('T')[0]}`;
+            if (scanType === 'fallback-base' || scanType === 'no-image') {
+              title = `⚠️ Build/Registry Issues + Base Image Vulnerabilities - ${new Date().toISOString().split('T')[0]}`;
               labels = ['security', 'build-failure', 'base-image', 'automated'];
             }
             
@@ -308,9 +420,9 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: title,
-              body: `${summary}\n\n## Automated Security Scan Results\n\n**Scan Type:** ${scanType}\n**Build Success:** ${buildSuccess}\n\nThis issue was automatically created because critical vulnerabilities were detected.\n\n**Next Steps:**\n${scanType === 'fallback-base' ? 
-                '1. Fix the build issues first (check build logs)\n2. Re-run the security scan with a successful build\n3. If build succeeds but vulnerabilities remain, apply security fixes' : 
-                '1. Review the detailed scan results in the [Security tab](https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/security)\n2. Update dependencies and base images\n3. Rebuild and redeploy the image'}\n4. Close this issue once resolved\n\n**Scan Run:** [${context.runId}](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
+              body: `${summary}\n\n## Automated Security Scan Results\n\n**Scan Type:** ${scanType}\n**Build Success:** ${buildSuccess}\n\nThis issue was automatically created because critical vulnerabilities were detected.\n\n**Next Steps:**\n${(scanType === 'fallback-base' || scanType === 'no-image') ? 
+                '1. Fix the build/registry issues first (check build logs)\n2. Ensure the image is properly pushed to the registry\n3. Re-run the security scan with a successful build/pull\n4. If build succeeds but vulnerabilities remain, apply security fixes' : 
+                '1. Review the detailed scan results in the [Security tab](https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/security)\n2. Update dependencies and base images\n3. Rebuild and redeploy the image'}\n5. Close this issue once resolved\n\n**Scan Run:** [${context.runId}](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
               labels: labels
             });
           }

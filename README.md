@@ -54,6 +54,7 @@ sudo /opt/hass-scripts/setup-hass.sh
 - **Dependency Management**: Automated version tracking and compatibility checking
 - **Security Enhancements**: Automated vulnerability scanning and dependency auditing
 - **Build Optimizations**: Registry caching and resource management
+- **Security Monitoring**: Comprehensive security scanning with Trivy and Grype
 
 ## Requirements
 
@@ -315,6 +316,15 @@ Backups are stored in `/var/backups/hass/` by default.
 - Use strong passwords
 - Monitor system logs
 - Regular security scans
+
+### Security Scanning
+The project includes automated security scanning:
+- **Trivy**: Container vulnerability scanning
+- **Grype**: Package vulnerability scanning
+- **GitHub Actions**: Automated security monitoring
+- **Local Testing**: Use `./scripts/test-security-scan.sh` for local testing
+
+For troubleshooting security scan issues, see [Security Scan Fixes](docs/security-scan-fixes.md).
 
 ### Home Assistant Security
 - Use strong passwords for Home Assistant
