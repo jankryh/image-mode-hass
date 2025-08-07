@@ -103,7 +103,7 @@ jobs:
     - name: Run security scan test (debugging)
       continue-on-error: true
       run: |
-        echo "🔧 Running security scan test for debugging..."
+        echo "🔧 Running security scan test..."
         chmod +x scripts/test-security-scan.sh
         ./scripts/test-security-scan.sh || echo "Test script failed, continuing with main scan"
 
