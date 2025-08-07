@@ -25,7 +25,7 @@ help: ## Show this help message
 
 build: ## Build container image
 	@echo "Building $(FULL_IMAGE_NAME)..."
-	time $(SUDO_CMD) $(CONTAINER_RUNTIME) build $(BUILD_FLAGS) \
+	$(SUDO_CMD) $(CONTAINER_RUNTIME) build $(BUILD_FLAGS) \
 		-t $(FULL_IMAGE_NAME) \
 		.
 	@echo "Build completed: $(FULL_IMAGE_NAME)"
@@ -38,7 +38,7 @@ push: build ## Build and push image to registry
 qcow2: build ## Build qcow2 image
 	@echo "Building qcow2 image..."
 	@mkdir -p $(OUTPUT_DIR)
-	time sudo podman run \
+	sudo podman run \
 		--rm --privileged --pull=newer \
 		--memory=8g --cpus=$(shell nproc) \
 		-v /var/lib/containers/storage:/var/lib/containers/storage \
@@ -54,7 +54,7 @@ qcow2: build ## Build qcow2 image
 iso: build ## Build ISO installer
 	@echo "Building ISO installer..."
 	@mkdir -p $(OUTPUT_DIR)
-	time sudo podman run \
+	sudo podman run \
 		--rm --privileged --pull=newer \
 		-v /var/lib/containers/storage:/var/lib/containers/storage \
 		-v ./$(CONFIG_FILE):/config.toml:ro \
