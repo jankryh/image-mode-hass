@@ -26,6 +26,7 @@ help: ## Show this help message
 build: ## Build container image
 	@echo "Building $(FULL_IMAGE_NAME)..."
 	$(SUDO_CMD) $(CONTAINER_RUNTIME) build $(BUILD_FLAGS) \
+		--build-arg TIMEZONE=$(TIMEZONE) \
 		-t $(FULL_IMAGE_NAME) \
 		.
 	@echo "Build completed: $(FULL_IMAGE_NAME)"
