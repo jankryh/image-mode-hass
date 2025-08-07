@@ -36,7 +36,8 @@ check_system_resources() {
     info "Checking system resources..."
     
     # Memory usage
-    local mem_usage=$(free | grep Mem | awk '{printf("%.1f", $3/$2 * 100.0)}')
+    local mem_usage
+    mem_usage=$(free | grep Mem | awk '{printf("%.1f", $3/$2 * 100.0)}')
     verbose "Memory usage: ${mem_usage}%"
     if (( $(echo "$mem_usage > 90" | bc -l) )); then
         error "High memory usage: ${mem_usage}%"
@@ -47,7 +48,8 @@ check_system_resources() {
     fi
     
     # Disk usage
-    local disk_usage=$(df /var | tail -1 | awk '{print $5}' | sed 's/%//')
+    local disk_usage
+    disk_usage=$(df /var | tail -1 | awk '{print $5}' | sed 's/%//')
     verbose "Disk usage (/var): ${disk_usage}%"
     if [[ $disk_usage -gt 90 ]]; then
         error "High disk usage: ${disk_usage}%"
@@ -58,7 +60,8 @@ check_system_resources() {
     fi
     
     # Load average
-    local load_avg=$(uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | sed 's/,//')
+    local load_avg
+    load_avg=$(uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | sed 's/,//')
     verbose "Load average (1min): $load_avg"
     log "Load average (1min): $load_avg"
 }
@@ -72,7 +75,8 @@ check_services() {
         if systemctl is-active --quiet "$service"; then
             log "Service $service is running"
             if [[ "$VERBOSE" == true ]]; then
-                local status=$(systemctl show "$service" --property=ActiveState,SubState --no-pager)
+                local status
+                status=$(systemctl show "$service" --property=ActiveState,SubState --no-pager)
                 verbose "$service status: $status"
             fi
         else
@@ -99,7 +103,8 @@ check_containers() {
     if podman ps --format "{{.Names}}" | grep -q "home-assistant"; then
         log "Home Assistant container is running"
         if [[ "$VERBOSE" == true ]]; then
-            local container_status=$(podman ps --filter name=home-assistant --format "{{.Status}}")
+            local container_status
+            container_status=$(podman ps --filter name=home-assistant --format "{{.Status}}")
             verbose "Container status: $container_status"
         fi
     else
@@ -121,7 +126,8 @@ check_network() {
     
     # Check ZeroTier network
     if command -v zerotier-cli &> /dev/null; then
-        local zt_networks=$(zerotier-cli listnetworks 2>/dev/null | tail -n +2 | wc -l)
+        local zt_networks
+        zt_networks=$(zerotier-cli listnetworks 2>/dev/null | tail -n +2 | wc -l)
         if [[ $zt_networks -gt 0 ]]; then
             log "ZeroTier is connected to $zt_networks network(s)"
             if [[ "$VERBOSE" == true ]]; then
@@ -151,7 +157,8 @@ check_bootc_status() {
             verbose "bootc status:"
             bootc status || warn "Failed to get bootc status"
         else
-            local bootc_output=$(bootc status 2>/dev/null | grep -E "(Staged|Booted)" | head -2)
+            local bootc_output
+            bootc_output=$(bootc status 2>/dev/null | grep -E "(Staged|Booted)" | head -2)
             if [[ -n "$bootc_output" ]]; then
                 log "bootc status OK"
                 verbose "$bootc_output"
@@ -167,7 +174,8 @@ check_bootc_status() {
 check_logs() {
     info "Checking for recent errors in logs..."
     
-    local error_count=$(journalctl --since "1 hour ago" --priority=err --no-pager | wc -l)
+    local error_count
+    error_count=$(journalctl --since "1 hour ago" --priority=err --no-pager | wc -l)
     if [[ $error_count -gt 0 ]]; then
         warn "Found $error_count error(s) in system logs in the last hour"
         if [[ "$VERBOSE" == true ]]; then
@@ -180,7 +188,8 @@ check_logs() {
     
     # Check Home Assistant specific logs
     if systemctl is-active --quiet home-assistant; then
-        local hass_errors=$(journalctl -u home-assistant --since "1 hour ago" --priority=err --no-pager | wc -l)
+        local hass_errors
+        hass_errors=$(journalctl -u home-assistant --since "1 hour ago" --priority=err --no-pager | wc -l)
         if [[ $hass_errors -gt 0 ]]; then
             warn "Found $hass_errors error(s) in Home Assistant logs in the last hour"
             if [[ "$VERBOSE" == true ]]; then

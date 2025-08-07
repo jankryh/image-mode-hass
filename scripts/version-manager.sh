@@ -133,11 +133,13 @@ update_changelog() {
     info "Updating CHANGELOG.md"
     
     # Create temporary file
-    local temp_file=$(mktemp)
+    local temp_file
+    temp_file=$(mktemp)
     
     # Process changelog
     local in_unreleased=false
-    local unreleased_content=""
+    # Note: unreleased_content is used for future enhancement
+    # local unreleased_content=""
     
     while IFS= read -r line; do
         if [[ "$line" == "## [Unreleased]"* ]]; then
@@ -180,7 +182,8 @@ create_git_tag() {
 
 # Function to show current version info
 show_version_info() {
-    local current_version=$(get_current_version)
+    local current_version
+    current_version=$(get_current_version)
     
     log_section "Version Information"
     echo "Current version: $current_version"
@@ -205,10 +208,12 @@ main() {
         bump)
             require_commands git sed
             
-            local current_version=$(get_current_version)
+            local current_version
+            current_version=$(get_current_version)
             info "Current version: $current_version"
             
-            local new_version=$(bump_version "$current_version" "$bump_type")
+            local new_version
+            new_version=$(bump_version "$current_version" "$bump_type")
             info "New version: $new_version"
             
             if ! confirm "Bump version from $current_version to $new_version?"; then
@@ -224,8 +229,10 @@ main() {
         release)
             require_commands git
             
-            local current_version=$(get_current_version)
-            local release_date=$(date +%Y-%m-%d)
+            local current_version
+            current_version=$(get_current_version)
+            local release_date
+            release_date=$(date +%Y-%m-%d)
             
             info "Preparing release for version $current_version"
             
@@ -261,7 +268,8 @@ main() {
             
             validate_version "$new_version"
             
-            local current_version=$(get_current_version)
+            local current_version
+            current_version=$(get_current_version)
             update_version_in_files "$current_version" "$new_version"
             
             success "Version set to $new_version"

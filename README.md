@@ -326,6 +326,15 @@ The project includes automated security scanning:
 
 For troubleshooting security scan issues, see [Security Scan Fixes](docs/security-scan-fixes.md).
 
+### Code Quality
+The project maintains high code quality standards:
+- **ShellCheck**: Static analysis for shell scripts
+- **Automated Linting**: GitHub Actions static code analysis
+- **Best Practices**: Consistent shell scripting patterns
+- **Documentation**: Comprehensive code documentation
+
+For details on static analysis fixes, see [Static Code Analysis Fixes](docs/static-code-analysis-fixes.md).
+
 ### Home Assistant Security
 - Use strong passwords for Home Assistant
 - Enable 2FA for admin accounts

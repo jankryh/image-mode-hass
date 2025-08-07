@@ -357,7 +357,8 @@ EOF
     # Memory usage status
     local memory_status="N/A"
     if [[ "$mem_usage" != "N/A" ]]; then
-        local mem_percent=$(echo "$mem_usage" | tr -d '%')
+        local mem_percent
+        mem_percent=$(echo "$mem_usage" | tr -d '%')
         if [[ $mem_percent -lt $MEMORY_THRESHOLD ]]; then
             memory_status='<span class="status-pass">PASS</span>'
         else
@@ -406,7 +407,8 @@ EOF
     fi
     
     if [[ "$mem_usage" != "N/A" ]]; then
-        local mem_percent=$(echo "$mem_usage" | tr -d '%')
+        local mem_percent
+        mem_percent=$(echo "$mem_usage" | tr -d '%')
         if [[ $mem_percent -gt $MEMORY_THRESHOLD ]]; then
             echo "            <li>Memory usage is high - consider increasing RAM or optimizing memory consumption</li>" >> "$REPORT_FILE"
         fi

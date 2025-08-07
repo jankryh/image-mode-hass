@@ -5,7 +5,8 @@
 set -euo pipefail
 
 # Configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# SCRIPT_DIR is used for future enhancements
+# SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SECRETS_DIR="/etc/hass-secrets"
 CONFIG_DIR="/opt/hass-config"
 VAULT_FILE="$SECRETS_DIR/vault.encrypted"
@@ -438,7 +439,8 @@ backup_vault() {
     log "Backing up secrets vault..."
     
     mkdir -p "$backup_dir"
-    local backup_file="$backup_dir/secrets_backup_$(date '+%Y%m%d_%H%M%S').tar.gz"
+    local backup_file
+    backup_file="$backup_dir/secrets_backup_$(date '+%Y%m%d_%H%M%S').tar.gz"
     
     tar -czf "$backup_file" -C "$(dirname "$SECRETS_DIR")" "$(basename "$SECRETS_DIR")"
     chmod 600 "$backup_file"

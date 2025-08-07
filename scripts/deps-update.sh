@@ -196,7 +196,8 @@ check_compatibility() {
 backup_current_state() {
     log "Creating backup of current dependency state..."
     
-    local backup_dir="$DEPS_DIR/backups/$(date '+%Y%m%d_%H%M%S')"
+    local backup_dir
+    backup_dir="$DEPS_DIR/backups/$(date '+%Y%m%d_%H%M%S')"
     mkdir -p "$backup_dir"
     
     # Backup current versions
@@ -257,7 +258,8 @@ validate_dependencies() {
 generate_report() {
     log "Generating dependency report..."
     
-    local report_file="$DEPS_DIR/reports/dependency_report_$(date '+%Y%m%d_%H%M%S').html"
+    local report_file
+    report_file="$DEPS_DIR/reports/dependency_report_$(date '+%Y%m%d_%H%M%S').html"
     
     cat > "$report_file" << EOF
 <!DOCTYPE html>
