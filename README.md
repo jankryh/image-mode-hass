@@ -6,8 +6,9 @@
 
 Solution for deploying Home Assistant using bootc (Image Mode). This project provides an immutable operating system with a pre-configured Home Assistant container and essential management tools.
 
-## Quick Start
+## 🚀 Quick Start
 
+### Option 1: bootc Image Mode (Recommended for VM/Hardware)
 ```bash
 # Clone the repository
 git clone https://github.com/YOUR_USERNAME/home-assistant-bootc.git
@@ -15,10 +16,6 @@ cd home-assistant-bootc
 
 # Run setup script
 ./setup.sh
-
-# Or manually configure your settings
-cp config-example.mk config.mk
-# Edit config.mk with your settings
 
 # Build the image
 sudo make build
@@ -30,6 +27,113 @@ sudo make deploy-vm
 # Or create ISO for hardware installation
 sudo make iso
 ```
+
+### Option 2: Container Mode (Recommended for Development/Testing)
+```bash
+# Clone the repository
+git clone https://github.com/YOUR_USERNAME/home-assistant-bootc.git
+cd home-assistant-bootc
+
+# Setup and deploy container
+./podman-deploy.sh setup
+
+# Or manual steps
+./podman-deploy.sh build
+./podman-deploy.sh start
+```
+
+## 📋 Project Structure and Scripts
+
+This project provides multiple deployment options through different scripts:
+
+### 🔧 **setup.sh** - Initial Setup Script
+**Purpose**: Prepares environment for bootc image building
+```bash
+./setup.sh
+```
+**Functions:**
+- ✅ Checks system requirements (podman, make, sudo)
+- ✅ Creates `config.mk` from template
+- ✅ Sets up basic configuration for bootc build
+- ✅ Configures variables for Makefile
+
+### 🔨 **Makefile** - Build System
+**Purpose**: Builds bootc image and VM deployment
+```bash
+make build      # Build container image
+make qcow2      # Create VM image
+make deploy-vm  # Deploy VM
+make iso        # Create ISO installer
+```
+**Functions:**
+- ✅ Builds container image using Containerfile
+- ✅ Creates qcow2/ISO using bootc-image-builder
+- ✅ Deploys VM using libvirt
+- ✅ Pushes to registry
+
+### 🐳 **podman-deploy.sh** - Container Runtime Management
+**Purpose**: Manages running container with systemd integration
+```bash
+./podman-deploy.sh build    # Build image
+./podman-deploy.sh start    # Start service
+./podman-deploy.sh status   # Check service status
+./podman-deploy.sh backup   # Create backup
+```
+**Functions:**
+- ✅ Builds image for runtime
+- ✅ Manages systemd service
+- ✅ Handles backups and restore
+- ✅ Provides health checks and monitoring
+
+### 📊 **Script Relationship Diagram**
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│  setup.sh   │───▶│  Makefile   │───▶│ bootc image │
+│             │    │             │    │             │
+│ • Init env  │    │ • Build     │    │ • VM/ISO    │
+│ • Config    │    │ • Deploy    │    │ • Hardware  │
+└─────────────┘    └─────────────┘    └─────────────┘
+                           │
+                           ▼
+                   ┌─────────────┐
+                   │podman-deploy│
+                   │    .sh      │
+                   │             │
+                   │ • Runtime   │
+                   │ • Service   │
+                   │ • Container │
+                   └─────────────┘
+```
+
+## 🎯 Deployment Modes
+
+### Mode 1: bootc Image Mode (Production)
+**Best for**: Production deployments, hardware installation, VMs
+```bash
+# Complete workflow
+./setup.sh
+make build
+make qcow2
+make deploy-vm
+```
+**Advantages:**
+- ✅ Immutable OS with atomic updates
+- ✅ Full system control
+- ✅ Hardware optimization
+- ✅ Production-ready security
+
+### Mode 2: Container Mode (Development/Testing)
+**Best for**: Development, testing, quick deployment
+```bash
+# Complete workflow
+./podman-deploy.sh setup
+./podman-deploy.sh start
+```
+**Advantages:**
+- ✅ Quick deployment
+- ✅ Easy updates
+- ✅ Development-friendly
+- ✅ Systemd integration
 
 ## Features
 
@@ -275,7 +379,14 @@ For more information, see the individual script documentation in the `scripts/` 
 
 ## Changelog
 
-### Version 2.0.0 (Current)
+### Version 2.1.0 (Current)
+- Added Podman container deployment mode
+- Enhanced security with non-root user
+- Improved systemd integration
+- Added comprehensive health checks
+- Better documentation and script organization
+
+### Version 2.0.0
 - Simplified configuration system
 - Streamlined build process
 - Enhanced security features
