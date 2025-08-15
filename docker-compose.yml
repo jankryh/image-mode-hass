@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  home-assistant:
+    build:
+      context: .
+      dockerfile: Containerfile
+      target: final
+      args:
+        TIMEZONE: ${TIMEZONE:-Europe/Prague}
+        HASS_USER: ${HASS_USER:-hass}
+        HASS_UID: ${HASS_UID:-1000}
+        HASS_GID: ${HASS_GID:-1000}
+    container_name: home-assistant
+    restart: unless-stopped
+    privileged: true  # Required for systemd and bootc
+    security_opt:
+      - seccomp:unconfined
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+      - SYS_RAWIO
+    volumes:
+      # Home Assistant configuration
+      - ${HASS_CONFIG_DIR:-./config}:/var/home-assistant/config:rw
+      - ${HASS_BACKUP_DIR:-./backups}:/var/home-assistant/backups:rw
+      - ${HASS_SECRETS_DIR:-./secrets}:/var/home-assistant/secrets:ro
+      
+      # System directories
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      
+      # Hardware access (uncomment as needed)
+      # - /dev/ttyUSB0:/dev/ttyUSB0:rw  # USB devices
+      # - /dev/ttyACM0:/dev/ttyACM0:rw  # Arduino devices
+      # - /dev/gpiochip0:/dev/gpiochip0:rw  # GPIO
+      
+      # Network configuration
+      - ./network:/etc/NetworkManager/system-connections:ro
+      
+      # SSL certificates
+      - ${SSL_CERT_DIR:-./ssl}:/etc/ssl/certs:ro
+      
+      # Logs
+      - ${LOG_DIR:-./logs}:/var/log/home-assistant:rw
+      
+      # SSH keys
+      - ${SSH_KEYS_DIR:-./ssh}:/home/hass/.ssh:ro
+      
+    ports:
+      - "8123:8123"  # Home Assistant web interface
+      - "22:22"      # SSH access
+      
+    environment:
+      - TZ=${TIMEZONE:-Europe/Prague}
+      - HOME_ASSISTANT_CONFIG_DIR=/var/home-assistant/config
+      - HOME_ASSISTANT_BACKUP_DIR=/var/home-assistant/backups
+      - HOME_ASSISTANT_SECRETS_DIR=/var/home-assistant/secrets
+      - HOME_ASSISTANT_USER=hass
+      
+    networks:
+      - hass-network
+      
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/health-check.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+      
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.hass.rule=Host(`hass.local`)"
+      - "traefik.http.routers.hass.entrypoints=websecure"
+      - "traefik.http.routers.hass.tls.certresolver=letsencrypt"
+      - "traefik.http.services.hass.loadbalancer.server.port=8123"
+
+networks:
+  hass-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

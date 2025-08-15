@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 # Optimized Home Assistant bootc image with enhanced performance
 # Multi-stage build with aggressive optimization
 
@@ -12,17 +13,22 @@ ARG TIMEZONE=Europe/Prague
 ARG HASS_BASE_DIR=/var/home-assistant
 ARG HASS_SCRIPTS_DIR=/opt/hass-scripts
 ARG HASS_CONFIG_BASE=/opt/hass-config
+ARG HASS_USER=hass
+ARG HASS_UID=1000
+ARG HASS_GID=1000
 
 # Copy repository configurations first (for better caching)
-COPY repos/zerotier.repo /etc/yum.repos.d/zerotier.repo
+COPY --link repos/zerotier.repo /etc/yum.repos.d/zerotier.repo
 
-# Initialize DNF cache once
+# Initialize DNF cache once with improved caching
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     --mount=type=cache,target=/var/lib/dnf,sharing=locked \
+    --mount=type=cache,target=/var/log/dnf.log,sharing=locked \
     dnf makecache --refresh
 
 # Remove unwanted packages early (single operation)
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    --mount=type=cache,target=/var/lib/dnf,sharing=locked \
     dnf -y remove \
         toolbox* container-tools* golang* buildah* skopeo* \
         podman-compose* go-toolset* golang-*mapstructure* \
@@ -37,11 +43,12 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
 FROM base-stage as package-stage
 LABEL stage=package-installation
 
-# Copy dependency list
-COPY bindep.txt /tmp/bindep.txt
+# Copy dependency list with improved caching
+COPY --link bindep.txt /tmp/bindep.txt
 
 # Install packages in optimized order (stable packages first)
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    --mount=type=cache,target=/var/lib/dnf,sharing=locked \
     dnf -y install \
         # Core system packages (most stable)
         vim-enhanced git curl wget nano rsync \
@@ -52,11 +59,14 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
         # System utilities
         htop tmux python3-pip nut chrony \
         # Security packages (updated frequently)
-        fail2ban \
+        fail2ban policycoreutils-python-utils \
+        # SELinux tools
+        setools setools-console \
     && dnf clean packages
 
 # Apply security updates in separate layer
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    --mount=type=cache,target=/var/lib/dnf,sharing=locked \
     dnf -y upgrade --refresh --security --exclude=kernel* \
     && dnf clean all
 
@@ -73,6 +83,11 @@ LABEL maintainer="Home Assistant bootc Image" \
       org.opencontainers.image.version="2.1.0" \
       performance.optimized="true" \
       security.hardened="standard"
+
+# Create non-root user for Home Assistant
+RUN groupadd -g ${HASS_GID} ${HASS_USER} && \
+    useradd -u ${HASS_UID} -g ${HASS_GID} -m -d /home/${HASS_USER} -s /bin/bash ${HASS_USER} && \
+    echo "${HASS_USER}:$(openssl rand -base64 32)" | chpasswd
 
 # Fix urllib3 vulnerability
 RUN pip3 install --upgrade --force-reinstall \
@@ -98,9 +113,11 @@ RUN sed -i \
         -e 's/#AllowTcpForwarding yes/AllowTcpForwarding no/' \
         -e 's/#X11Forwarding yes/X11Forwarding no/' \
         -e 's/#PermitEmptyPasswords no/PermitEmptyPasswords no/' \
+        -e 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' \
+        -e 's/#AuthorizedKeysFile/AuthorizedKeysFile/' \
         /etc/ssh/sshd_config
 
-# Create directory structure
+# Create directory structure with proper ownership
 RUN mkdir -p \
         "${HASS_BASE_DIR}/config" \
         "${HASS_BASE_DIR}/backups" \
@@ -110,6 +127,13 @@ RUN mkdir -p \
         "${HASS_CONFIG_BASE}" \
         "/etc/hass-secrets" \
         "/etc/fail2ban/jail.d" \
+        "/home/${HASS_USER}/.ssh" \
+    && chown -R ${HASS_USER}:${HASS_USER} \
+        "${HASS_BASE_DIR}" \
+        "/var/log/home-assistant" \
+        "${HASS_SCRIPTS_DIR}" \
+        "${HASS_CONFIG_BASE}" \
+        "/home/${HASS_USER}" \
     && chmod 755 \
         "${HASS_BASE_DIR}/config" \
         "${HASS_BASE_DIR}/backups" \
@@ -119,21 +143,23 @@ RUN mkdir -p \
     && chmod 700 \
         "${HASS_BASE_DIR}/secrets" \
         "/etc/hass-secrets" \
-        "/root"
+        "/root" \
+        "/home/${HASS_USER}/.ssh"
 
-# Copy application files
-COPY containers-systemd/ /usr/share/containers/systemd/
-COPY scripts/ ${HASS_SCRIPTS_DIR}/
-COPY configs/ ${HASS_CONFIG_BASE}/
+# Copy application files with improved caching
+COPY --link --chown=${HASS_USER}:${HASS_USER} containers-systemd/ /usr/share/containers/systemd/
+COPY --link --chown=${HASS_USER}:${HASS_USER} scripts/ ${HASS_SCRIPTS_DIR}/
+COPY --link --chown=${HASS_USER}:${HASS_USER} configs/ ${HASS_CONFIG_BASE}/
 
-# Configure fail2ban
+# Configure fail2ban with enhanced rules
 RUN echo '[sshd]' > /etc/fail2ban/jail.d/custom.conf && \
     echo 'enabled = true' >> /etc/fail2ban/jail.d/custom.conf && \
     echo 'maxretry = 3' >> /etc/fail2ban/jail.d/custom.conf && \
     echo 'bantime = 3600' >> /etc/fail2ban/jail.d/custom.conf && \
-    echo 'findtime = 600' >> /etc/fail2ban/jail.d/custom.conf
+    echo 'findtime = 600' >> /etc/fail2ban/jail.d/custom.conf && \
+    echo 'logpath = /var/log/secure' >> /etc/fail2ban/jail.d/custom.conf
 
-# Set up log rotation
+# Set up log rotation with compression
 RUN cat > /etc/logrotate.d/home-assistant << 'EOF'
 /var/log/home-assistant/*.log {
     daily
@@ -142,7 +168,10 @@ RUN cat > /etc/logrotate.d/home-assistant << 'EOF'
     delaycompress
     missingok
     notifempty
-    create 644 root root
+    create 644 hass hass
+    postrotate
+        systemctl reload home-assistant >/dev/null 2>&1 || true
+    endscript
 }
 EOF
 
@@ -151,6 +180,11 @@ RUN chmod +x ${HASS_SCRIPTS_DIR}/*.sh && \
     find /etc -type f -name "*.conf" -exec chmod 644 {} \; && \
     find /etc -type f -name "*passwd*" -exec chmod 640 {} \; && \
     find /etc -type f -name "*shadow*" -exec chmod 600 {} \;
+
+# SELinux configuration
+RUN semanage port -a -t ssh_port_t -p tcp 8123 2>/dev/null || semanage port -m -t ssh_port_t -p tcp 8123 && \
+    setsebool -P ssh_chroot_rw_homedirs on && \
+    setsebool -P ssh_keysign on
 
 #==================================================
 # Stage 4: Security Hardened Build (Optional)
@@ -162,6 +196,7 @@ LABEL security.hardened="enhanced" \
 
 # Enhanced security: Remove development packages
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    --mount=type=cache,target=/var/lib/dnf,sharing=locked \
     dnf -y remove \
         '*-devel' '*-debuginfo' '*-debugsource' \
         'gcc*' 'make*' 'automake*' 'autoconf*' \
@@ -191,7 +226,8 @@ RUN rm -rf \
         /var/log/* \
         /tmp/* \
         /var/tmp/* \
-    && mkdir -p /var/log/home-assistant
+    && mkdir -p /var/log/home-assistant && \
+    chown ${HASS_USER}:${HASS_USER} /var/log/home-assistant
 
 # Final security verification
 RUN dnf -y check-update --security || true
@@ -201,6 +237,58 @@ RUN dnf -y check-update --security || true
 #==================================================
 FROM security-hardened as final
 LABEL stage=final
+
+# Health check configuration
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8123/api/ || exit 1
+
+# Create health check script
+RUN cat > /usr/local/bin/health-check.sh << 'EOF'
+#!/bin/bash
+set -e
+
+# Check if Home Assistant is running
+if ! curl -f -s http://localhost:8123/api/ >/dev/null 2>&1; then
+    echo "Home Assistant API not responding"
+    exit 1
+fi
+
+# Check if SSH is running
+if ! systemctl is-active --quiet sshd; then
+    echo "SSH service not running"
+    exit 1
+fi
+
+# Check disk space
+DISK_USAGE=$(df / | awk 'NR==2 {print $5}' | sed 's/%//')
+if [ "$DISK_USAGE" -gt 90 ]; then
+    echo "Disk usage too high: ${DISK_USAGE}%"
+    exit 1
+fi
+
+# Check memory usage
+MEM_USAGE=$(free | awk 'NR==2{printf "%.0f", $3*100/$2}')
+if [ "$MEM_USAGE" -gt 95 ]; then
+    echo "Memory usage too high: ${MEM_USAGE}%"
+    exit 1
+fi
+
+echo "Health check passed"
+exit 0
+EOF
+
+RUN chmod +x /usr/local/bin/health-check.sh
+
+# Environment variables
+ENV HOME_ASSISTANT_CONFIG_DIR="${HASS_BASE_DIR}/config" \
+    HOME_ASSISTANT_BACKUP_DIR="${HASS_BASE_DIR}/backups" \
+    HOME_ASSISTANT_SECRETS_DIR="${HASS_BASE_DIR}/secrets" \
+    HOME_ASSISTANT_SCRIPTS_DIR="${HASS_SCRIPTS_DIR}" \
+    HOME_ASSISTANT_USER="${HASS_USER}" \
+    TZ="${TIMEZONE}"
+
+# Expose ports
+EXPOSE 22 8123
 
 # Set default command
 CMD ["/usr/sbin/init"]
