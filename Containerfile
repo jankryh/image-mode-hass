@@ -86,7 +86,7 @@ RUN systemctl enable sshd chronyd fail2ban && \
     firewall-offline-cmd --add-port=22/tcp && \
     firewall-offline-cmd --add-service=ssh
 
-# SSH hardening
+# SSH hardening (adjusted for bootc compatibility)
 RUN sed -i \
         -e 's/#PermitRootLogin yes/PermitRootLogin no/' \
         -e 's/#PasswordAuthentication yes/PasswordAuthentication no/' \
@@ -195,3 +195,12 @@ RUN rm -rf \
 
 # Final security verification
 RUN dnf -y check-update --security || true
+
+#==================================================
+# Stage 5: Final Image (Default Target)
+#==================================================
+FROM security-hardened as final
+LABEL stage=final
+
+# Set default command
+CMD ["/usr/sbin/init"]
