@@ -1,4 +1,4 @@
-# Home Assistant Container Deployment Guide
+# Home Assistant Podman Deployment Guide
 
 ## Přehled
 
@@ -12,11 +12,12 @@ Tento projekt poskytuje optimalizovaný a zabezpečený kontejner pro Home Assis
 - **Automatické zálohování** s rotací
 - **Fail2ban** pro ochranu proti útokům
 - **BuildKit cache** pro rychlejší buildy
+- **Systemd integrace** pro automatické spouštění
 
 ## 📋 Požadavky
 
-- Docker 20.10+
-- Docker Compose 2.0+
+- Podman 4.0+
+- Systemd
 - Git
 - Bash shell
 
@@ -40,11 +41,11 @@ nano .env
 ### 3. Nasazení
 ```bash
 # Automatické nastavení a spuštění
-./deploy.sh setup
+./podman-deploy.sh setup
 
 # Nebo manuální postup
-./deploy.sh build
-./deploy.sh start
+./podman-deploy.sh build
+./podman-deploy.sh start
 ```
 
 ## ⚙️ Konfigurace
@@ -57,19 +58,16 @@ nano .env
 | `HASS_USER` | `hass` | Uživatel pro Home Assistant |
 | `HASS_UID` | `1000` | UID uživatele |
 | `HASS_GID` | `1000` | GID skupiny |
-| `HASS_CONFIG_DIR` | `./config` | Adresář konfigurace |
-| `HASS_BACKUP_DIR` | `./backups` | Adresář záloh |
-| `HASS_SECRETS_DIR` | `./secrets` | Adresář tajemství |
+| `BACKUP_RETENTION_DAYS` | `7` | Dny retence záloh |
 
 ### Struktura adresářů
 ```
-image-mode-hass/
+/var/home-assistant/
 ├── config/          # Home Assistant konfigurace
 ├── backups/         # Zálohy
-├── secrets/         # Tajemství (read-only)
-├── logs/           # Logy
-├── ssl/            # SSL certifikáty
-└── ssh/            # SSH klíče
+└── secrets/         # Tajemství (read-only)
+
+/var/log/home-assistant/  # Logy
 ```
 
 ## 🛠️ Správa
@@ -77,43 +75,49 @@ image-mode-hass/
 ### Základní příkazy
 
 ```bash
-# Stav kontejneru
-./deploy.sh status
+# Stav kontejneru a služby
+./podman-deploy.sh status
 
 # Logy
-./deploy.sh logs
+./podman-deploy.sh logs
 
 # Přístup do kontejneru
-./deploy.sh shell
+./podman-deploy.sh shell
 
 # Restart
-./deploy.sh restart
+./podman-deploy.sh restart
 
 # Zastavení
-./deploy.sh stop
+./podman-deploy.sh stop
+
+# Povolení automatického spouštění
+./podman-deploy.sh enable
+
+# Zakázání automatického spouštění
+./podman-deploy.sh disable
 ```
 
 ### Zálohování a obnova
 
 ```bash
 # Vytvoření zálohy
-./deploy.sh backup
+./podman-deploy.sh backup
 
 # Obnova ze zálohy
-./deploy.sh restore backups/hass_backup_20231201_143022.tar.gz
+./podman-deploy.sh restore /var/home-assistant/backups/hass_backup_20231201_143022.tar.gz
 ```
 
 ### Monitoring
 
 ```bash
 # Health check
-./deploy.sh health
+./podman-deploy.sh health
 
 # Aktualizace
-./deploy.sh update
+./podman-deploy.sh update
 
 # Vyčištění
-./deploy.sh clean
+./podman-deploy.sh clean
 ```
 
 ## 🔒 Bezpečnost
@@ -149,20 +153,20 @@ image-mode-hass/
    ssh-keygen -t ed25519 -C "hass@example.com"
    
    # Kopírování do kontejneru
-   cp ~/.ssh/id_ed25519.pub ./ssh/authorized_keys
+   sudo cp ~/.ssh/id_ed25519.pub /var/home-assistant/secrets/authorized_keys
    ```
 
 2. **SSL certifikáty**
    ```bash
    # Vlastní certifikáty
-   cp your-cert.pem ./ssl/
-   cp your-key.pem ./ssl/
+   sudo cp your-cert.pem /var/home-assistant/secrets/
+   sudo cp your-key.pem /var/home-assistant/secrets/
    ```
 
 3. **Tajemství**
    ```bash
    # Konfigurace tajemství
-   nano ./secrets/secrets.yaml
+   sudo nano /var/home-assistant/secrets/secrets.yaml
    ```
 
 ## 📊 Monitoring a logy
@@ -176,13 +180,13 @@ Kontejner obsahuje automatický health check, který kontroluje:
 ### Logy
 ```bash
 # Zobrazení logů
-./deploy.sh logs
+./podman-deploy.sh logs
 
 # Logy Home Assistant
-docker-compose exec home-assistant tail -f /var/log/home-assistant/home-assistant.log
+journalctl -u home-assistant -f
 
 # Logy systému
-docker-compose exec home-assistant journalctl -f
+podman exec home-assistant journalctl -f
 ```
 
 ### Metriky
@@ -197,48 +201,50 @@ docker-compose exec home-assistant journalctl -f
 1. **Kontejner se nespustí**
    ```bash
    # Kontrola logů
-   ./deploy.sh logs
+   ./podman-deploy.sh logs
    
    # Kontrola stavu
-   ./deploy.sh status
+   ./podman-deploy.sh status
    ```
 
 2. **Problémy s oprávněními**
    ```bash
    # Oprava oprávnění
-   sudo chown -R 1000:1000 config/ backups/ logs/
+   sudo chown -R 1000:1000 /var/home-assistant
+   sudo chown -R 1000:1000 /var/log/home-assistant
    ```
 
 3. **Problémy s porty**
    ```bash
    # Kontrola obsazených portů
-   netstat -tulpn | grep :8123
-   netstat -tulpn | grep :22
+   sudo ss -tulpn | grep :8123
+   sudo ss -tulpn | grep :22
    ```
 
 4. **Problémy s SELinux**
    ```bash
    # Kontrola SELinux
-   docker-compose exec home-assistant getenforce
+   podman exec home-assistant getenforce
    
    # Dočasné vypnutí (jen pro testování)
-   docker-compose exec home-assistant setenforce 0
+   podman exec home-assistant setenforce 0
    ```
 
 ### Debugging
 
 ```bash
 # Debug mode
-docker-compose exec home-assistant bash
+./podman-deploy.sh shell
 
 # Kontrola služeb
+systemctl status home-assistant
 systemctl status sshd
 systemctl status chronyd
 systemctl status fail2ban
 
 # Kontrola sítí
-ip addr show
-ss -tulpn
+podman exec home-assistant ip addr show
+podman exec home-assistant ss -tulpn
 ```
 
 ## 📈 Výkonnostní optimalizace
@@ -246,30 +252,31 @@ ss -tulpn
 ### Build optimalizace
 - **Multi-stage build**: Snížení velikosti finálního image
 - **BuildKit cache**: Rychlejší opakované buildy
-- **Layer caching**: Optimalizace Docker vrstev
+- **Layer caching**: Optimalizace Podman vrstev
 
 ### Runtime optimalizace
 - **Non-root uživatel**: Bezpečnostní optimalizace
 - **SELinux**: Dodatečná ochrana
 - **Health checks**: Automatický monitoring
+- **Systemd integrace**: Automatické spouštění
 
 ### Monitoring
 ```bash
 # Využití prostředků
-docker stats home-assistant
+podman stats home-assistant
 
 # Disk usage
-docker-compose exec home-assistant df -h
+podman exec home-assistant df -h
 
 # Memory usage
-docker-compose exec home-assistant free -h
+podman exec home-assistant free -h
 ```
 
 ## 🔄 Aktualizace
 
 ### Automatická aktualizace
 ```bash
-./deploy.sh update
+./podman-deploy.sh update
 ```
 
 ### Manuální aktualizace
@@ -278,10 +285,10 @@ docker-compose exec home-assistant free -h
 git pull origin main
 
 # Rebuild image
-./deploy.sh -f build
+./podman-deploy.sh -f build
 
 # Restart
-./deploy.sh restart
+./podman-deploy.sh restart
 ```
 
 ## 📝 Logování
@@ -301,6 +308,33 @@ logger:
 - Automatická rotace každý den
 - Komprese starých logů
 - Retence 7 dní
+
+## 🔧 Systemd integrace
+
+### Automatické spouštění
+```bash
+# Povolení automatického spouštění
+./podman-deploy.sh enable
+
+# Kontrola stavu
+systemctl is-enabled home-assistant
+```
+
+### Timer služby
+Projekt obsahuje automatické timer služby:
+- `hass-backup.timer` - automatické zálohování
+- `hass-auto-update.timer` - automatické aktualizace
+
+### Správa služeb
+```bash
+# Povolení timer služeb
+sudo systemctl enable hass-backup.timer
+sudo systemctl enable hass-auto-update.timer
+
+# Spuštění timer služeb
+sudo systemctl start hass-backup.timer
+sudo systemctl start hass-auto-update.timer
+```
 
 ## 🤝 Přispívání
 
@@ -323,4 +357,4 @@ Pro podporu a otázky:
 
 ---
 
-**Poznámka**: Tento kontejner je optimalizován pro produkční nasazení s důrazem na bezpečnost a výkonnost.
+**Poznámka**: Tento kontejner je optimalizován pro produkční nasazení s důrazem na bezpečnost a výkonnost. Používá Podman s systemd integrací pro maximální kompatibilitu s moderními Linux systémy.

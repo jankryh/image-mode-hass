@@ -24,18 +24,26 @@ Image=home-assistant.image
 AddDevice=/dev/ttyACM0
 AddDevice=/dev/ttyUSB0
 ContainerName=home-assistant
-PodmanArgs=--privileged --log-driver=journald --log-opt=tag="home-assistant"
+PodmanArgs=--privileged --log-driver=journald --log-opt=tag="home-assistant" --user=hass:1000
 Network=host
 Environment=TZ=Europe/Prague
 Environment=HASS_LOG_LEVEL=info
-Volume=/var/home-assistant/config:/config:Z
+Environment=HOME_ASSISTANT_CONFIG_DIR=/var/home-assistant/config
+Environment=HOME_ASSISTANT_BACKUP_DIR=/var/home-assistant/backups
+Environment=HOME_ASSISTANT_SECRETS_DIR=/var/home-assistant/secrets
+Environment=HOME_ASSISTANT_USER=hass
+Volume=/var/home-assistant/config:/var/home-assistant/config:Z
+Volume=/var/home-assistant/backups:/var/home-assistant/backups:Z
+Volume=/var/home-assistant/secrets:/var/home-assistant/secrets:ro,Z
 Volume=/run/dbus:/run/dbus:ro
-Volume=/var/log/home-assistant:/var/log:Z
+Volume=/var/log/home-assistant:/var/log/home-assistant:Z
+Volume=/etc/localtime:/etc/localtime:ro
+Volume=/etc/timezone:/etc/timezone:ro
 Pull=missing
 
-# Security context
-User=root
-Group=root
+# Security context - using non-root user
+User=hass
+Group=hass
 
 # Resource limits
 MemoryLimit=2G

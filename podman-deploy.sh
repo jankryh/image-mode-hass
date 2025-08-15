@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Home Assistant Container Deployment Script
-# This script provides easy management of the Home Assistant container
+# Home Assistant Podman Deployment Script
+# This script provides easy management of the Home Assistant container using Podman and systemd
 
 set -euo pipefail
 
@@ -16,11 +16,11 @@ NC='\033[0m' # No Color
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 ENV_FILE="${PROJECT_DIR}/.env"
-COMPOSE_FILE="${PROJECT_DIR}/docker-compose.yml"
+CONTAINER_NAME="home-assistant"
+IMAGE_NAME="localhost/home-assistant:latest"
 
 # Default values
 ACTION=""
-BUILD_ARGS=""
 FORCE_REBUILD=false
 CLEAN_BUILD=false
 
@@ -43,16 +43,16 @@ log_error() {
 
 show_help() {
     cat << EOF
-Home Assistant Container Deployment Script
+Home Assistant Podman Deployment Script
 
 Usage: $0 [OPTIONS] ACTION
 
 Actions:
     build       Build the container image
-    start       Start the container
-    stop        Stop the container
-    restart     Restart the container
-    status      Show container status
+    start       Start the container service
+    stop        Stop the container service
+    restart     Restart the container service
+    status      Show container and service status
     logs        Show container logs
     shell       Access container shell
     backup      Create backup
@@ -61,6 +61,8 @@ Actions:
     clean       Clean up resources
     health      Run health check
     setup       Initial setup
+    enable      Enable systemd service
+    disable     Disable systemd service
 
 Options:
     -f, --force     Force rebuild
@@ -80,7 +82,7 @@ EOF
 }
 
 check_dependencies() {
-    local deps=("docker" "docker-compose")
+    local deps=("podman" "systemctl")
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" &> /dev/null; then
             log_error "$dep is required but not installed"
@@ -100,94 +102,106 @@ load_env() {
 
 create_directories() {
     local dirs=(
-        "${HASS_CONFIG_DIR:-./config}"
-        "${HASS_BACKUP_DIR:-./backups}"
-        "${HASS_SECRETS_DIR:-./secrets}"
-        "${LOG_DIR:-./logs}"
-        "${SSL_CERT_DIR:-./ssl}"
-        "${SSH_KEYS_DIR:-./ssh}"
+        "/var/home-assistant/config"
+        "/var/home-assistant/backups"
+        "/var/home-assistant/secrets"
+        "/var/log/home-assistant"
     )
     
     for dir in "${dirs[@]}"; do
         if [[ ! -d "$dir" ]]; then
             log_info "Creating directory: $dir"
-            mkdir -p "$dir"
+            sudo mkdir -p "$dir"
         fi
     done
+    
+    # Set proper ownership
+    sudo chown -R 1000:1000 /var/home-assistant
+    sudo chown -R 1000:1000 /var/log/home-assistant
 }
 
 build_image() {
     log_info "Building Home Assistant container image..."
     
-    local build_cmd="docker-compose -f $COMPOSE_FILE build"
+    local build_cmd="podman build -t $IMAGE_NAME"
     
     if [[ "$FORCE_REBUILD" == true ]]; then
         build_cmd="$build_cmd --no-cache"
     fi
     
     if [[ "$CLEAN_BUILD" == true ]]; then
-        log_info "Cleaning Docker cache..."
-        docker system prune -f
+        log_info "Cleaning Podman cache..."
+        podman system prune -f
     fi
     
-    eval "$build_cmd"
+    eval "$build_cmd ."
     log_success "Image build completed"
 }
 
 start_container() {
-    log_info "Starting Home Assistant container..."
-    docker-compose -f "$COMPOSE_FILE" up -d
-    log_success "Container started"
+    log_info "Starting Home Assistant container service..."
+    
+    # Enable and start the systemd service
+    sudo systemctl enable home-assistant
+    sudo systemctl start home-assistant
+    
+    log_success "Container service started"
     
     # Wait for container to be ready
     log_info "Waiting for container to be ready..."
     sleep 10
     
     # Check health
-    if docker-compose -f "$COMPOSE_FILE" ps | grep -q "healthy"; then
-        log_success "Container is healthy"
+    if systemctl is-active --quiet home-assistant; then
+        log_success "Container service is active"
     else
-        log_warning "Container may not be fully ready yet"
+        log_warning "Container service may not be fully ready yet"
     fi
 }
 
 stop_container() {
-    log_info "Stopping Home Assistant container..."
-    docker-compose -f "$COMPOSE_FILE" down
-    log_success "Container stopped"
+    log_info "Stopping Home Assistant container service..."
+    sudo systemctl stop home-assistant
+    log_success "Container service stopped"
 }
 
 restart_container() {
-    log_info "Restarting Home Assistant container..."
-    docker-compose -f "$COMPOSE_FILE" restart
-    log_success "Container restarted"
+    log_info "Restarting Home Assistant container service..."
+    sudo systemctl restart home-assistant
+    log_success "Container service restarted"
 }
 
 show_status() {
-    log_info "Container status:"
-    docker-compose -f "$COMPOSE_FILE" ps
+    log_info "Container and service status:"
+    echo "=== Systemd Service Status ==="
+    systemctl status home-assistant --no-pager -l
+    echo ""
+    echo "=== Podman Container Status ==="
+    podman ps -a --filter name=$CONTAINER_NAME
+    echo ""
+    echo "=== Container Health ==="
+    podman healthcheck run $CONTAINER_NAME 2>/dev/null || echo "Health check not available"
 }
 
 show_logs() {
     log_info "Container logs:"
-    docker-compose -f "$COMPOSE_FILE" logs -f
+    journalctl -u home-assistant -f
 }
 
 access_shell() {
     log_info "Accessing container shell..."
-    docker-compose -f "$COMPOSE_FILE" exec home-assistant /bin/bash
+    podman exec -it $CONTAINER_NAME /bin/bash
 }
 
 create_backup() {
-    local backup_dir="${HASS_BACKUP_DIR:-./backups}"
+    local backup_dir="/var/home-assistant/backups"
     local timestamp=$(date +%Y%m%d_%H%M%S)
     local backup_file="${backup_dir}/hass_backup_${timestamp}.tar.gz"
     
     log_info "Creating backup: $backup_file"
     
     # Create backup using container
-    docker-compose -f "$COMPOSE_FILE" exec -T home-assistant \
-        tar -czf - -C /var/home-assistant config secrets > "$backup_file"
+    podman exec $CONTAINER_NAME tar -czf - -C /var/home-assistant config secrets > "$backup_file"
     
     if [[ $? -eq 0 ]]; then
         log_success "Backup created: $backup_file"
@@ -228,7 +242,10 @@ restore_backup() {
     stop_container
     
     # Restore backup
-    tar -xzf "$backup_file" -C "${HASS_CONFIG_DIR:-./config}"
+    tar -xzf "$backup_file" -C /var/home-assistant
+    
+    # Fix permissions
+    sudo chown -R 1000:1000 /var/home-assistant
     
     # Start container
     start_container
@@ -253,16 +270,17 @@ clean_resources() {
     log_info "Cleaning up resources..."
     
     # Stop and remove containers
-    docker-compose -f "$COMPOSE_FILE" down --volumes --remove-orphans
+    podman stop $CONTAINER_NAME 2>/dev/null || true
+    podman rm $CONTAINER_NAME 2>/dev/null || true
     
     # Remove unused images
-    docker image prune -f
+    podman image prune -f
     
     # Remove unused volumes
-    docker volume prune -f
+    podman volume prune -f
     
     # Remove unused networks
-    docker network prune -f
+    podman network prune -f
     
     log_success "Cleanup completed"
 }
@@ -270,12 +288,24 @@ clean_resources() {
 run_health_check() {
     log_info "Running health check..."
     
-    if docker-compose -f "$COMPOSE_FILE" exec home-assistant /usr/local/bin/health-check.sh; then
+    if podman exec $CONTAINER_NAME /usr/local/bin/health-check.sh; then
         log_success "Health check passed"
     else
         log_error "Health check failed"
         exit 1
     fi
+}
+
+enable_service() {
+    log_info "Enabling Home Assistant systemd service..."
+    sudo systemctl enable home-assistant
+    log_success "Service enabled"
+}
+
+disable_service() {
+    log_info "Disabling Home Assistant systemd service..."
+    sudo systemctl disable home-assistant
+    log_success "Service disabled"
 }
 
 initial_setup() {
@@ -293,7 +323,8 @@ initial_setup() {
     # Build image
     build_image
     
-    # Start container
+    # Enable and start service
+    enable_service
     start_container
     
     log_success "Initial setup completed"
@@ -319,7 +350,7 @@ while [[ $# -gt 0 ]]; do
             show_help
             exit 0
             ;;
-        build|start|stop|restart|status|logs|shell|backup|restore|update|clean|health|setup)
+        build|start|stop|restart|status|logs|shell|backup|restore|update|clean|health|setup|enable|disable)
             ACTION="$1"
             shift
             ;;
@@ -380,6 +411,12 @@ case "$ACTION" in
         ;;
     health)
         run_health_check
+        ;;
+    enable)
+        enable_service
+        ;;
+    disable)
+        disable_service
         ;;
     setup)
         initial_setup

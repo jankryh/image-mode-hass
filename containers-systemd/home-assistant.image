@@ -1,2 +1,2 @@
 [Image]
-Image=ghcr.io/home-assistant/home-assistant:stable
+Image=localhost/home-assistant:latest
