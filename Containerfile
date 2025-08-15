@@ -2,252 +2,196 @@
 # Multi-stage build with aggressive optimization
 
 #==================================================
-# Stage 1: Dependency Resolution (Cached Layer)
+# Stage 1: Base Preparation (Shared Dependencies)
 #==================================================
-FROM quay.io/fedora/fedora-bootc:42 as deps-stage
-LABEL stage=dependency-resolution
+FROM quay.io/fedora/fedora-bootc:42 as base-stage
+LABEL stage=base-preparation
 
-# Install linux-system-roles early for better caching
-RUN --mount=type=cache,target=/var/cache/dnf \
-    dnf -y install linux-system-roles && \
-    dnf clean metadata
-
-# Create dependency directory and copy static deps
-RUN mkdir -p /deps
-COPY bindep.txt /deps/
-
-# Generate runtime dependencies via Ansible (cached operation)
-RUN /usr/share/ansible/collections/ansible_collections/fedora/linux_system_roles/roles/podman/.ostree/get_ostree_data.sh packages runtime fedora-42 raw >> /deps/bindep.txt || true
-
-#==================================================
-# Stage 2: Package Preparation (Optimized Layer)
-#==================================================
-FROM quay.io/fedora/fedora-bootc:42 as package-stage
-LABEL stage=package-optimization
-
-# Copy repository configurations early
-COPY repos/zerotier.repo /etc/yum.repos.d/zerotier.repo
-
-# PERFORMANCE: Aggressive package cache optimization
-RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
-    --mount=type=cache,target=/var/lib/dnf,sharing=locked \
-    dnf makecache --refresh
-
-# SECURITY: Aggressively remove vulnerable packages and force updates
-RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
-    --mount=type=cache,target=/var/lib/dnf,sharing=locked \
-    dnf -y remove toolbox* container-tools* golang* buildah* skopeo* podman-compose* \
-        go-toolset* golang-*mapstructure* golang-github* || true && \
-    dnf -y autoremove
-
-# SECURITY: Force security updates and latest patches
-RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
-    --mount=type=cache,target=/var/lib/dnf,sharing=locked \
-    dnf makecache --refresh && \
-    dnf -y upgrade --refresh --security --exclude=kernel* && \
-    dnf clean all
-
-#==================================================
-# Stage 3: Production Build (Final Optimized Image)
-#==================================================
-FROM quay.io/fedora/fedora-bootc:42 as production
-LABEL maintainer="Home Assistant bootc Image" \
-      version="2.0.0-optimized" \
-      description="High-performance immutable OS with Home Assistant"
-
-# Copy optimized repository configs
-COPY repos/zerotier.repo /etc/yum.repos.d/zerotier.repo
-
-# Target the removal to only the necessary packages (toolbox and go).
-RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
-    dnf -y remove toolbox* golang* go-toolset* || true && \
-    dnf -y autoremove && \
-    dnf clean all
-
-# PERFORMANCE: Install packages in optimal order (frequently changing last)
-# 1. Essential system packages (rarely change)
-RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
-    --mount=type=bind,from=deps-stage,source=/deps/,target=/deps \
-    grep -v '^#' /deps/bindep.txt | grep -v '^$' | \
-    head -20 | xargs dnf -y install
-
-# 2. Development and utility packages (change occasionally)
-RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
-    dnf -y install \
-    git curl wget nano vim-enhanced \
-    rsync tmux tree jq \
-    bind-utils tcpdump strace lsof \
-    && dnf clean packages
-
-# 3. Security and monitoring packages (change frequently)
-RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
-    dnf -y install \
-    openssh-server fail2ban chrony \
-    htop python3-pip logrotate \
-    && dnf clean all
-
-# Vulnerability fix for urllib3
-RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
-    dnf -y remove python3-urllib3 || true && \
-    pip3 install --upgrade --force-reinstall \
-    urllib3==2.5.0 requests cryptography
-
-# Declare TIMEZONE build-arg to suppress build warnings
-ARG TIMEZONE
-
-# PERFORMANCE: Combine system configuration in single layer
-RUN firewall-offline-cmd --add-port=8123/tcp && \
-    firewall-offline-cmd --add-port=22/tcp && \
-    firewall-offline-cmd --add-service=ssh && \
-    # SSH hardening
-    sed -i 's/#PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config && \
-    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config && \
-    # Enable services
-    systemctl enable sshd chronyd fail2ban && \
-    # Set timezone
-    ln -sf /usr/share/zoneinfo/${TIMEZONE:-Europe/Prague} /etc/localtime
-
-# PERFORMANCE: Create all directories in single layer
-# Configure paths via build args
+# Essential build arguments
+ARG TIMEZONE=Europe/Prague
 ARG HASS_BASE_DIR=/var/home-assistant
 ARG HASS_SCRIPTS_DIR=/opt/hass-scripts
 ARG HASS_CONFIG_BASE=/opt/hass-config
 
-RUN mkdir -p \
-    ${HASS_BASE_DIR}/config \
-    ${HASS_BASE_DIR}/backups \
-    ${HASS_BASE_DIR}/secrets \
-    /var/log/home-assistant \
-    ${HASS_SCRIPTS_DIR} \
-    ${HASS_CONFIG_BASE} \
-    /etc/hass-secrets && \
-    chmod 755 ${HASS_BASE_DIR}/config ${HASS_BASE_DIR}/backups \
-              /var/log/home-assistant ${HASS_SCRIPTS_DIR} ${HASS_CONFIG_BASE} && \
-    chmod 700 ${HASS_BASE_DIR}/secrets /etc/hass-secrets
+# Copy repository configurations first (for better caching)
+COPY repos/zerotier.repo /etc/yum.repos.d/zerotier.repo
 
-# PERFORMANCE: Copy all files in optimal order (most stable first)
-COPY containers-systemd/ /usr/share/containers/systemd/
-# Copy scripts with configurable target
-ARG HASS_SCRIPTS_DIR=/opt/hass-scripts
-COPY scripts/ ${HASS_SCRIPTS_DIR}/
-COPY configs/ /opt/hass-config/
-
-# PERFORMANCE: Set permissions and log rotation in single layer
-RUN chmod +x ${HASS_SCRIPTS_DIR}/*.sh && \
-    # Configure log rotation
-    echo '/var/log/home-assistant/*.log {' > /etc/logrotate.d/home-assistant && \
-    echo '    daily' >> /etc/logrotate.d/home-assistant && \
-    echo '    rotate 7' >> /etc/logrotate.d/home-assistant && \
-    echo '    compress' >> /etc/logrotate.d/home-assistant && \
-    echo '    delaycompress' >> /etc/logrotate.d/home-assistant && \
-    echo '    missingok' >> /etc/logrotate.d/home-assistant && \
-    echo '    notifempty' >> /etc/logrotate.d/home-assistant && \
-    echo '    create 644 root root' >> /etc/logrotate.d/home-assistant && \
-    echo '}' >> /etc/logrotate.d/home-assistant
-
-# PERFORMANCE: Final cleanup in single layer
+# Initialize DNF cache once
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
-    dnf -y remove gcc gcc-c++ make automake autoconf || true && \
-    dnf clean all && \
-    rm -rf /var/cache/dnf/* /tmp/* /var/tmp/* && \
-    # Remove unnecessary documentation
-    rm -rf /usr/share/doc/* /usr/share/man/* /usr/share/info/* && \
-    # Clean package manager metadata
-    find /var/lib/rpm -name "*.rpm" -delete 2>/dev/null || true
+    --mount=type=cache,target=/var/lib/dnf,sharing=locked \
+    dnf makecache --refresh
 
-# Optimized metadata labels
-LABEL org.opencontainers.image.title="Home Assistant bootc Image Optimized" \
+# Remove unwanted packages early (single operation)
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    dnf -y remove \
+        toolbox* container-tools* golang* buildah* skopeo* \
+        podman-compose* go-toolset* golang-*mapstructure* \
+        golang-github* \
+    || true && \
+    dnf -y autoremove && \
+    dnf clean packages
+
+#==================================================
+# Stage 2: Package Installation (Optimized)
+#==================================================
+FROM base-stage as package-stage
+LABEL stage=package-installation
+
+# Copy dependency list
+COPY bindep.txt /tmp/bindep.txt
+
+# Install packages in optimized order (stable packages first)
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    dnf -y install \
+        # Core system packages (most stable)
+        vim-enhanced git curl wget nano rsync \
+        bind-utils tcpdump strace lsof tree jq \
+        # Network packages
+        iwlwifi-dvm-firmware iwlwifi-mvm-firmware \
+        wpa_supplicant openssh-server zerotier-one \
+        # System utilities
+        htop tmux python3-pip nut chrony \
+        # Security packages (updated frequently)
+        fail2ban \
+    && dnf clean packages
+
+# Apply security updates in separate layer
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    dnf -y upgrade --refresh --security --exclude=kernel* \
+    && dnf clean all
+
+#==================================================
+# Stage 3: Production Build (Final Image)
+#==================================================
+FROM package-stage as production
+LABEL maintainer="Home Assistant bootc Image" \
+      version="2.1.0-optimized" \
+      description="High-performance immutable OS with Home Assistant" \
+      org.opencontainers.image.title="Home Assistant bootc Image Optimized" \
       org.opencontainers.image.description="High-performance immutable OS with Home Assistant" \
       org.opencontainers.image.vendor="Custom Build Optimized" \
-      org.opencontainers.image.version="2.0.0" \
-      org.opencontainers.image.created="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
-      io.buildah.version="$(buildah --version | cut -d' ' -f3)" \
+      org.opencontainers.image.version="2.1.0" \
       performance.optimized="true" \
       security.hardened="standard"
 
-#==================================================
-# Stage 4: Security Hardened Build (Enhanced Security)
-#==================================================
-FROM production as security-hardened
+# Fix urllib3 vulnerability
+RUN pip3 install --upgrade --force-reinstall \
+    "urllib3>=2.5.0" "requests>=2.32.0" "cryptography>=42.0.0"
 
-# SECURITY: Enhanced vulnerability mitigation
-RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
-    --mount=type=cache,target=/var/lib/dnf,sharing=locked \
-    # Remove build tools, avoiding libtool which causes dependency issues.
-    dnf -y remove \
-        *-devel *-debuginfo *-debugsource \
-        gcc* make* automake* autoconf* \
-        cmake* kernel-devel* kernel-headers* || true && \
-    # Force remove vulnerable libs
-    dnf -y remove \
-        *viper* *mapstructure* *golang* || true && \
-    # Aggressive cleanup
-    dnf -y autoremove && \
-    dnf clean all
+# System configuration (combined for efficiency)
+RUN systemctl enable sshd chronyd fail2ban && \
+    ln -sf "/usr/share/zoneinfo/${TIMEZONE}" /etc/localtime && \
+    # Firewall configuration
+    firewall-offline-cmd --add-port=8123/tcp && \
+    firewall-offline-cmd --add-port=22/tcp && \
+    firewall-offline-cmd --add-service=ssh
 
-# ===================================================================
-# FIX: Clean all dnf metadata and mirrors before making a new cache.
-# This prevents errors from out-of-sync or unavailable mirrors (HTTP 404).
-# ===================================================================
-RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
-    dnf clean all && \
-    dnf makecache --refresh && \
-    dnf -y check-update --security || true && \
-    dnf -y upgrade --refresh --security --nobest && \
-    dnf -y distro-sync --nobest && \
-    dnf -y upgrade --refresh --advisory=FEDORA-2025-181d4984f4 && \
-    dnf clean all
+# SSH hardening
+RUN sed -i \
+        -e 's/#PermitRootLogin yes/PermitRootLogin no/' \
+        -e 's/#PasswordAuthentication yes/PasswordAuthentication no/' \
+        -e 's/#Protocol 2/Protocol 2/' \
+        -e 's/#LogLevel INFO/LogLevel VERBOSE/' \
+        -e 's/#MaxAuthTries 6/MaxAuthTries 3/' \
+        -e 's/#ClientAliveInterval 0/ClientAliveInterval 300/' \
+        -e 's/#ClientAliveCountMax 3/ClientAliveCountMax 2/' \
+        -e 's/#AllowTcpForwarding yes/AllowTcpForwarding no/' \
+        -e 's/#X11Forwarding yes/X11Forwarding no/' \
+        -e 's/#PermitEmptyPasswords no/PermitEmptyPasswords no/' \
+        /etc/ssh/sshd_config
 
-# SECURITY: Remove unnecessary files and reduce attack surface
-RUN rm -rf \
-    /usr/share/doc/* \
-    /usr/share/man/* \
-    /usr/share/info/* \
-    /usr/share/locale/* \
-    /usr/include/* \
-    /usr/lib*/gconv \
-    /usr/lib*/gcc \
-    /usr/lib*/cmake \
-    /usr/lib*/pkgconfig \
-    /var/cache/* \
-    /var/log/* \
-    /tmp/* \
-    /var/tmp/* \
-    && mkdir -p /var/log/home-assistant
+# Create directory structure
+RUN mkdir -p \
+        "${HASS_BASE_DIR}/config" \
+        "${HASS_BASE_DIR}/backups" \
+        "${HASS_BASE_DIR}/secrets" \
+        "/var/log/home-assistant" \
+        "${HASS_SCRIPTS_DIR}" \
+        "${HASS_CONFIG_BASE}" \
+        "/etc/hass-secrets" \
+        "/etc/fail2ban/jail.d" \
+    && chmod 755 \
+        "${HASS_BASE_DIR}/config" \
+        "${HASS_BASE_DIR}/backups" \
+        "/var/log/home-assistant" \
+        "${HASS_SCRIPTS_DIR}" \
+        "${HASS_CONFIG_BASE}" \
+    && chmod 700 \
+        "${HASS_BASE_DIR}/secrets" \
+        "/etc/hass-secrets" \
+        "/root"
 
-# SECURITY: Enhanced SSH hardening
-RUN sed -i 's/#Protocol 2/Protocol 2/' /etc/ssh/sshd_config && \
-    sed -i 's/#LogLevel INFO/LogLevel VERBOSE/' /etc/ssh/sshd_config && \
-    sed -i 's/#MaxAuthTries 6/MaxAuthTries 3/' /etc/ssh/sshd_config && \
-    sed -i 's/#ClientAliveInterval 0/ClientAliveInterval 300/' /etc/ssh/sshd_config && \
-    sed -i 's/#ClientAliveCountMax 3/ClientAliveCountMax 2/' /etc/ssh/sshd_config && \
-    sed -i 's/#AllowTcpForwarding yes/AllowTcpForwarding no/' /etc/ssh/sshd_config && \
-    sed -i 's/#X11Forwarding yes/X11Forwarding no/' /etc/ssh/sshd_config && \
-    sed -i 's/#PermitEmptyPasswords no/PermitEmptyPasswords no/' /etc/ssh/sshd_config
+# Copy application files
+COPY containers-systemd/ /usr/share/containers/systemd/
+COPY scripts/ ${HASS_SCRIPTS_DIR}/
+COPY configs/ ${HASS_CONFIG_BASE}/
 
-# SECURITY: Enhanced fail2ban configuration
-RUN mkdir -p /etc/fail2ban/jail.d && \
-    echo '[sshd]' > /etc/fail2ban/jail.d/custom.conf && \
+# Configure fail2ban
+RUN echo '[sshd]' > /etc/fail2ban/jail.d/custom.conf && \
     echo 'enabled = true' >> /etc/fail2ban/jail.d/custom.conf && \
     echo 'maxretry = 3' >> /etc/fail2ban/jail.d/custom.conf && \
     echo 'bantime = 3600' >> /etc/fail2ban/jail.d/custom.conf && \
     echo 'findtime = 600' >> /etc/fail2ban/jail.d/custom.conf
 
-# SECURITY: Enhanced firewall rules
-RUN firewall-offline-cmd --set-default-zone=public && \
-    firewall-offline-cmd --remove-service=dhcpv6-client || true && \
-    firewall-offline-cmd --remove-service=mdns || true && \
-    firewall-offline-cmd --remove-service=samba-client || true
+# Set up log rotation
+RUN cat > /etc/logrotate.d/home-assistant << 'EOF'
+/var/log/home-assistant/*.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 644 root root
+}
+EOF
 
-# SECURITY: File system permissions hardening
-RUN chmod 700 /root && \
-    chmod 755 /etc /usr /var && \
+# Set executable permissions and final permissions
+RUN chmod +x ${HASS_SCRIPTS_DIR}/*.sh && \
     find /etc -type f -name "*.conf" -exec chmod 644 {} \; && \
     find /etc -type f -name "*passwd*" -exec chmod 640 {} \; && \
     find /etc -type f -name "*shadow*" -exec chmod 600 {} \;
-# SECURITY: Update labels with enhanced security info
+
+#==================================================
+# Stage 4: Security Hardened Build (Optional)
+#==================================================
+FROM production as security-hardened
 LABEL security.hardened="enhanced" \
-      security.scan.date="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
-      security.vulnerabilities.removed="toolbox,golang,mapstructure,urllib3" \
       security.level="high" \
       security.compliance="cis-basic"
+
+# Enhanced security: Remove development packages
+RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
+    dnf -y remove \
+        '*-devel' '*-debuginfo' '*-debugsource' \
+        'gcc*' 'make*' 'automake*' 'autoconf*' \
+        'cmake*' 'kernel-devel*' 'kernel-headers*' \
+    || true && \
+    dnf -y autoremove && \
+    dnf clean all
+
+# Enhanced firewall rules
+RUN firewall-offline-cmd --set-default-zone=public && \
+    firewall-offline-cmd --remove-service=dhcpv6-client 2>/dev/null || true && \
+    firewall-offline-cmd --remove-service=mdns 2>/dev/null || true && \
+    firewall-offline-cmd --remove-service=samba-client 2>/dev/null || true
+
+# Security cleanup: Remove unnecessary files
+RUN rm -rf \
+        /usr/share/doc/* \
+        /usr/share/man/* \
+        /usr/share/info/* \
+        /usr/share/locale/* \
+        /usr/include/* \
+        /usr/lib*/gconv \
+        /usr/lib*/gcc \
+        /usr/lib*/cmake \
+        /usr/lib*/pkgconfig \
+        /var/cache/* \
+        /var/log/* \
+        /tmp/* \
+        /var/tmp/* \
+    && mkdir -p /var/log/home-assistant
+
+# Final security verification
+RUN dnf -y check-update --security || true
